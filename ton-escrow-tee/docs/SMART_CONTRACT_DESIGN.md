@@ -1,184 +1,191 @@
-# TON Escrow Smart Contract Design
+# Deal Registry Smart Contract
 
 ## Overview
 
-A minimal smart contract that acts as a **trustless state registry** for deal terms. The contract does NOT hold funds - TEE HD wallets still manage escrow funds.
+A minimal smart contract (written in **Tolk**) that acts as a **trustless state registry** for deal terms. The contract does NOT hold funds - TEE HD wallets manage escrow funds.
 
 **Contract responsibilities:**
 1. Store deal terms on-chain (immutable commitment)
-2. Provide `get_deal` for TEE to verify terms
+2. Only allow TEE (admin) to create deals
+3. Provide `getDeal` for anyone to verify terms
 
-**TEE responsibilities (unchanged):**
-1. Derive HD wallets for escrow
-2. Hold and transfer funds
-3. Verify deposits against on-chain deal terms
+**TEE responsibilities:**
+1. Verify signatures from both parties before registering
+2. Derive HD wallets for escrow
+3. Hold and transfer funds
+4. Verify deposits and content via Bot API
 
-## Why This Approach
+## Why Admin-Only Create
 
-| Aspect | Backend DB Only | Contract as State Registry |
-|--------|-----------------|---------------------------|
-| Deal terms | Backend can lie | Immutable on-chain |
-| TEE verification | Must trust backend | Reads from chain directly |
-| Advertiser commitment | Can dispute terms | Signed on-chain tx |
-| Complexity | Lower | Slightly higher |
-| Gas cost | None | ~0.02 TON per deal |
+| Aspect | Anyone Creates | Admin-Only Creates |
+|--------|---------------|-------------------|
+| Who calls contract | Advertiser | TEE |
+| Signature verification | On-chain (complex) | In TEE (simple) |
+| When deal is created | Before deposit | After all verifications pass |
+| Invalid deals on-chain | Possible | Impossible |
+
+**Chosen approach: Admin-Only** - TEE verifies everything first, then registers.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SIMPLIFIED ARCHITECTURE                      │
+│                         DEAL FLOW                                │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   Advertiser                                                    │
-│       │                                                         │
-│       │  1. create_deal(publisher, amount, timeout)             │
-│       │  ─────────────────────────────►  CONTRACT               │
-│       │     (commits to terms on-chain)  (stores terms)         │
-│       │                                                         │
-│       │  2. deposit TON ──────────────►  TEE HD WALLET          │
-│       │     (to derived escrow address)  (holds funds)          │
-│       │                                                         │
-│   TEE                                                           │
-│       │                                                         │
-│       │  3. get_deal(deal_id) ────────►  CONTRACT               │
-│       │  ◄────────────────────────────   {publisher, amount,    │
-│       │                                   timeout, advertiser}  │
-│       │                                                         │
-│       │  4. Verify deposit against on-chain terms:              │
-│       │     - escrow balance >= deal.amount                     │
-│       │     - within timeout period                             │
-│       │                                                         │
-│       │  5. Execute release/refund from TEE wallet              │
-│       │     (TEE still controls the actual funds)               │
+│  1. Both parties sign deal params off-chain                     │
+│     Publisher signs: {dealId, channelId, postId, contentHash,   │
+│                       duration, publisher, advertiser, amount,  │
+│                       postedAt}                                 │
+│     Advertiser signs: same params                               │
+│                                                                 │
+│  2. Advertiser deposits TON to escrow address                   │
+│     Backend detects deposit, calls TEE                          │
+│                                                                 │
+│  3. TEE verifies everything:                                    │
+│     ✓ Publisher signature valid                                 │
+│     ✓ Advertiser signature valid                                │
+│     ✓ Deposit >= amount                                         │
+│     ✓ Post exists via Bot API                                   │
+│     ✓ Content hash matches                                      │
+│                                                                 │
+│  4. TEE calls createDeal on contract                            │
+│     Only TEE (admin) can do this                                │
+│                                                                 │
+│  5. Deal is now registered on-chain                             │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Contract State (Minimal)
+## Contract State
 
-```func
-;; FunC (TON smart contract language)
+```tolk
+// Tolk smart contract
 
-;; Simple deal registry - just stores terms, doesn't hold funds
-
-global cell deals;           ;; Dictionary: deal_id -> deal_data
-global int next_deal_id;     ;; Auto-increment counter
-
-;; Deal data structure (per deal)
-;; - advertiser: MsgAddress (who pays)
-;; - publisher: MsgAddress (who receives)
-;; - amount: Coins (expected deposit in nanoTON)
-;; - escrow_index: uint32 (TEE HD wallet derivation index)
-;; - created_at: uint32 (timestamp)
-;; - accept_timeout: uint32 (seconds)
-;; - release_timeout: uint32 (seconds)
+global admin: address;      // TEE address (set once at deploy)
+global deals: dict;         // Dictionary: deal_id -> deal_data
+global nextDealId: int;     // Auto-increment counter
 ```
 
-No status tracking in contract - TEE derives status from:
-1. On-chain deal terms (from contract)
-2. Escrow wallet balance (from blockchain)
-3. Off-chain events (from backend)
+### Deal Data Structure
+
+Each deal stores:
+- `channelId` (int64) - Telegram channel ID
+- `postId` (int64) - Telegram message ID
+- `contentHash` (uint256) - SHA256 of ad content
+- `duration` (uint32) - Seconds ad must stay up
+- `publisher` (address) - Publisher's TON address
+- `advertiser` (address) - Advertiser's TON address
+- `amount` (coins) - Escrow amount in nanoTON
+- `postedAt` (uint32) - When ad was posted (unix timestamp)
+- `createdAt` (uint32) - When deal was registered (unix timestamp)
 
 ---
 
 ## Contract Functions
 
-### 1. `create_deal` (Advertiser)
+### 1. `createDeal` (Admin Only)
 
-```func
-() create_deal(
-    slice publisher,
-    int amount,
-    int accept_timeout,
-    int release_timeout
-) impure {
-    ;; Get next deal ID
-    int deal_id = next_deal_id;
-    next_deal_id += 1;
+```tolk
+fun onInternalMessage(msgValue: int, msgFull: cell, msgBody: slice) {
+    // ...
+    if (op == OP_CREATE_DEAL) {
+        // Only admin (TEE) can create deals
+        assert(senderAddress == admin, ERROR_UNAUTHORIZED);
 
-    ;; Store deal terms
-    ;; escrow_index = deal_id + 1 (matching TEE derivation)
-    deals~udict_set(64, deal_id, pack_deal(
-        sender_address,    ;; advertiser
-        publisher,
-        amount,
-        deal_id + 1,       ;; escrow_index for TEE
-        now(),
-        accept_timeout,
-        release_timeout
-    ));
-
-    ;; Emit event with escrow address (TEE can derive, but helpful)
+        // Parse deal params from message
+        // Store in deals dictionary
+        // Increment nextDealId
+    }
 }
 ```
 
-**Called by:** Advertiser via Mini App
-**Gas cost:** ~0.02 TON
+**Called by:** TEE only (after verifying signatures, deposit, content)
+**Gas cost:** ~0.05 TON
 
-### 2. `get_deal` (Getter - Free)
+### 2. `getDeal` (Getter - Free)
 
-```func
-;; method_id makes this a getter (free to call, no gas)
-(slice, slice, int, int, int, int, int) get_deal(int deal_id) method_id {
-    (slice deal_data, int found) = deals.udict_get?(64, deal_id);
-    throw_unless(404, found);
-
-    return unpack_deal(deal_data);
-    ;; Returns: (advertiser, publisher, amount, escrow_index,
-    ;;           created_at, accept_timeout, release_timeout)
-}
-
-int get_next_deal_id() method_id {
-    return next_deal_id;
+```tolk
+get fun getDeal(dealId: int): (int, int, int, int, address, address, int, int, int) {
+    // Returns: channelId, postId, contentHash, duration,
+    //          publisher, advertiser, amount, postedAt, createdAt
 }
 ```
 
-**Called by:** TEE to verify deal terms
-**Gas cost:** FREE (getter method)
+**Called by:** Anyone (to verify deal terms)
+**Gas cost:** FREE
+
+### 3. `dealExists` (Getter - Free)
+
+```tolk
+get fun dealExists(dealId: int): int {
+    // Returns 1 if exists, 0 if not
+}
+```
+
+### 4. `getNextDealId` (Getter - Free)
+
+```tolk
+get fun getNextDealId(): int {
+    // Returns next available deal ID
+}
+```
+
+### 5. `getAdmin` (Getter - Free)
+
+```tolk
+get fun getAdmin(): address {
+    // Returns admin (TEE) address
+}
+```
 
 ---
 
-## That's It!
+## Cell Structure
 
-The contract is intentionally minimal:
+Due to TON's 1023-bit cell limit, deal data is split:
 
-| What contract does | What contract does NOT do |
-|-------------------|--------------------------|
-| Store deal terms | Hold funds |
-| Provide `get_deal` | Track deal status |
-| Auto-increment IDs | Handle timeouts |
-| Emit creation events | Process payments |
+**Main cell:**
+- channelId (64 bits)
+- postId (64 bits)
+- contentHash (256 bits)
+- duration (32 bits)
+- postedAt (32 bits)
+- createdAt (32 bits)
+- Reference to address cell
+
+**Address cell (referenced):**
+- publisher (267 bits)
+- advertiser (267 bits)
+- amount (124 bits max)
 
 ---
 
-## TEE Verification Flow
+## Message Format
 
-```typescript
-// TEE verifies deposit against on-chain terms
-async function verifyDeposit(dealId: number): Promise<VerificationResult> {
-  // 1. Read deal terms from CONTRACT (trustless)
-  const deal = await contract.get_deal(dealId);
-  // deal = { advertiser, publisher, amount, escrow_index, ... }
+### createDeal Message Body
 
-  // 2. Derive escrow wallet using same index
-  const escrow = await deriveEscrowWallet(mnemonic, deal.escrow_index);
-
-  // 3. Check escrow balance on-chain
-  const balance = await client.getBalance(escrow.addressRaw);
-
-  // 4. Verify
-  if (balance >= deal.amount) {
-    return { verified: true, deal, escrow };
-  } else {
-    return { verified: false, reason: 'Insufficient deposit' };
-  }
-}
 ```
+| Field       | Bits | Description              |
+|-------------|------|--------------------------|
+| op          | 32   | 0x1 (OP_CREATE_DEAL)     |
+| dealId      | 64   | Deal ID                  |
+| channelId   | 64   | Telegram channel ID      |
+| postId      | 64   | Telegram message ID      |
+| contentHash | 256  | SHA256 of content        |
+| duration    | 32   | Duration in seconds      |
+| ref         | cell | Address cell (below)     |
 
-**Key insight:** TEE reads terms from contract, not from backend. Backend cannot lie about deal terms.
+Address cell:
+| Field       | Bits | Description              |
+|-------------|------|--------------------------|
+| publisher   | 267  | Publisher address        |
+| advertiser  | 267  | Advertiser address       |
+| amount      | var  | Amount (VarUInt16)       |
+| postedAt    | 32   | Posted timestamp         |
+```
 
 ---
 
@@ -186,153 +193,48 @@ async function verifyDeposit(dealId: number): Promise<VerificationResult> {
 
 | Attack | Mitigated By |
 |--------|-------------|
-| Backend lies about deal terms | TEE reads from contract |
-| Advertiser disputes amount | They signed create_deal tx |
-| Publisher claims wrong address | Contract stores their address |
-| Someone creates fake deal | Must match advertiser's signature |
+| Fake deal registration | Only admin can create |
+| Admin lies about terms | Admin is TEE with attestation |
+| Modify deal after creation | Deals are immutable once stored |
+| Query wrong deal | Deal ID is explicit parameter |
 
 ---
 
-## Gas Costs
+## TypeScript Integration
 
-| Operation | Cost | Payer |
-|-----------|------|-------|
-| create_deal | ~0.02 TON | Advertiser |
-| get_deal | FREE | - |
+```typescript
+// From ton-escrow-tee/src/deal-registry.ts
 
-Total per deal: **~0.02 TON** (vs ~0.15 TON for full escrow contract)
+const OP_CREATE_DEAL = 0x1;
+
+// Build createDeal message
+const addressesCell = beginCell()
+    .storeAddress(params.publisher)
+    .storeAddress(params.advertiser)
+    .storeCoins(params.amount)
+    .storeUint(params.postedAt, 32)
+    .endCell();
+
+const body = beginCell()
+    .storeUint(OP_CREATE_DEAL, 32)
+    .storeUint(params.dealId, 64)
+    .storeInt(params.channelId, 64)
+    .storeInt(params.postId, 64)
+    .storeUint(params.contentHash, 256)
+    .storeUint(params.duration, 32)
+    .storeRef(addressesCell)
+    .endCell();
+```
 
 ---
 
 ## Comparison
 
-| Aspect | No Contract | Simple Registry | Full Escrow Contract |
-|--------|-------------|-----------------|---------------------|
-| Deal terms storage | Backend DB | On-chain | On-chain |
-| Fund custody | TEE wallets | TEE wallets | Contract |
-| TEE trust required | High | Medium | Low |
-| Complexity | Low | Low | High |
-| Gas per deal | 0 | ~0.02 TON | ~0.15 TON |
-| Advertiser commitment | None | Signed tx | Signed tx |
-
-**Chosen approach: Simple Registry** - best balance of trustlessness and simplicity.
-
----
-
-## Implementation
-
-### Contract Code (FunC)
-
-```func
-#include "imports/stdlib.fc";
-
-;; Storage
-global cell deals;
-global int next_deal_id;
-
-;; Load storage
-() load_data() impure inline {
-    slice ds = get_data().begin_parse();
-    deals = ds~load_dict();
-    next_deal_id = ds~load_uint(64);
-}
-
-;; Save storage
-() save_data() impure inline {
-    set_data(begin_cell()
-        .store_dict(deals)
-        .store_uint(next_deal_id, 64)
-        .end_cell());
-}
-
-;; Handle incoming messages
-() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
-    slice cs = in_msg_full.begin_parse();
-    int flags = cs~load_uint(4);
-    if (flags & 1) { return (); } ;; ignore bounced
-    slice sender = cs~load_msg_addr();
-
-    int op = in_msg_body~load_uint(32);
-
-    load_data();
-
-    if (op == 0x1) { ;; create_deal
-        slice publisher = in_msg_body~load_msg_addr();
-        int amount = in_msg_body~load_coins();
-        int accept_timeout = in_msg_body~load_uint(32);
-        int release_timeout = in_msg_body~load_uint(32);
-
-        int deal_id = next_deal_id;
-        next_deal_id += 1;
-
-        cell deal = begin_cell()
-            .store_slice(sender)           ;; advertiser
-            .store_slice(publisher)
-            .store_coins(amount)
-            .store_uint(deal_id + 1, 32)   ;; escrow_index
-            .store_uint(now(), 32)         ;; created_at
-            .store_uint(accept_timeout, 32)
-            .store_uint(release_timeout, 32)
-            .end_cell();
-
-        deals~udict_set_ref(64, deal_id, deal);
-        save_data();
-        return ();
-    }
-
-    throw(0xffff); ;; unknown op
-}
-
-;; Getter: get deal by ID
-(slice, slice, int, int, int, int, int) get_deal(int deal_id) method_id {
-    load_data();
-    (cell deal_cell, int found) = deals.udict_get_ref?(64, deal_id);
-    throw_unless(404, found);
-
-    slice ds = deal_cell.begin_parse();
-    return (
-        ds~load_msg_addr(),    ;; advertiser
-        ds~load_msg_addr(),    ;; publisher
-        ds~load_coins(),       ;; amount
-        ds~load_uint(32),      ;; escrow_index
-        ds~load_uint(32),      ;; created_at
-        ds~load_uint(32),      ;; accept_timeout
-        ds~load_uint(32)       ;; release_timeout
-    );
-}
-
-;; Getter: next deal ID
-int get_next_deal_id() method_id {
-    load_data();
-    return next_deal_id;
-}
-```
-
-### TypeScript Integration (TEE)
-
-```typescript
-import { Address, TonClient, Contract } from '@ton/ton';
-
-// Call get_deal getter
-async function getDealFromContract(
-  client: TonClient,
-  contractAddress: Address,
-  dealId: number
-): Promise<Deal> {
-  const contract = client.open(Contract.create(contractAddress));
-
-  const result = await contract.get('get_deal', [
-    { type: 'int', value: BigInt(dealId) }
-  ]);
-
-  return {
-    advertiser: result.stack.readAddress(),
-    publisher: result.stack.readAddress(),
-    amount: result.stack.readBigNumber(),
-    escrowIndex: result.stack.readNumber(),
-    createdAt: result.stack.readNumber(),
-    acceptTimeout: result.stack.readNumber(),
-    releaseTimeout: result.stack.readNumber(),
-  };
-}
-```
+| Aspect | Full Escrow Contract | Deal Registry (Current) |
+|--------|---------------------|------------------------|
+| Fund custody | Contract | TEE HD Wallets |
+| Who creates deals | Advertiser | TEE (admin) |
+| Signature verification | On-chain | In TEE |
+| Complexity | High | Low |
+| Gas per deal | ~0.15 TON | ~0.05 TON |
+| Trust model | Trustless | TEE-secured |

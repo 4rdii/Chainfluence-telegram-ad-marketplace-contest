@@ -48,6 +48,41 @@ Publishers (channel owners) and advertisers connect through this platform. Adver
         └── SMART_CONTRACT_DESIGN.md
 ```
 
+## Why EigenCompute TEE?
+
+### The Problem
+
+Ad marketplace escrow needs to:
+1. Hold funds securely until conditions are met
+2. Verify off-chain data (Telegram posts) that can't be accessed on-chain
+3. Execute automated release/refund based on real-world conditions
+
+### Escrow Options Compared
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Smart Contract Escrow** | Fully trustless | Can't verify Telegram content; complex on-chain logic |
+| **Centralized Backend** | Simple; can access APIs | Users must trust the operator |
+| **Multisig** | Distributed trust | Requires manual coordination; slow |
+| **Chainlink CRE** | Decentralized oracle network; battle-tested | No native TON support; higher latency; cost per request |
+| **TEE (EigenCompute)** | Can access APIs; verifiable execution; TON native | Requires TEE trust assumption |
+
+### Why TEE Wins for This Use Case
+
+1. **Off-chain Data Access** - TEE can call Telegram Bot API to verify posts exist and content matches
+2. **Verifiable Execution** - EigenCompute provides attestation that code ran correctly
+3. **Key Security** - Private keys never leave TEE; derived from KMS-provided mnemonic
+4. **Automation** - No manual intervention needed for release/refund
+5. **Cost Effective** - Invoked on-demand, pay only for compute time
+6. **TON Native** - Direct integration with TON blockchain without bridges
+
+### EigenCompute Specifics
+
+- **KMS Integration** - Mnemonic injected at runtime, not stored
+- **Stateless** - TEE doesn't persist state; reads from blockchain
+- **Attestation** - Cryptographic proof of code integrity
+- **On-demand** - Spun up only when needed (deposit detected, check triggered)
+
 ## Key Features
 
 - **Trustless Escrow** - Funds held in TEE-derived HD wallets, not custodial

@@ -460,25 +460,46 @@ CREATE INDEX idx_deal_events_deal ON deal_events(deal_id);
 
 ### Smart Contract (Deal Registry)
 
-Minimal contract that stores deal terms on-chain:
+Minimal Tolk contract that stores deal terms on-chain:
 
 ```
-create_deal(publisher, amount, timeouts)  → Advertiser commits terms
-get_deal(deal_id)                         → TEE reads terms (FREE)
+createDeal(...)  → TEE only (admin), called after all verifications pass
+getDeal(dealId)  → Anyone can read deal terms (FREE)
 ```
 
-**Why?** TEE reads deal terms from contract, not backend. Backend cannot lie about:
-- Deal amount
-- Publisher address
-- Timeout periods
+**Key design:** Only TEE can create deals. TEE verifies everything first:
+- Both parties' signatures
+- Deposit amount
+- Post existence and content
 
-### TEE Responsibilities
+### TEE Functions
 
-1. **Wallet Derivation** - HD wallets from KMS mnemonic
-2. **Verify Against Contract** - Read deal terms from chain, not backend
-3. **Check Deposit** - Verify escrow balance >= contract amount
-4. **Fund Release** - Transfer to publisher address from contract
-5. **Refund Processing** - Return to advertiser address from contract
+| Function | Description |
+|----------|-------------|
+| `createEscrowWallet(dealId)` | Derive HD wallet address for advertiser deposit |
+| `verifyAndRegisterDeal(input)` | Verify signatures, deposit, content → register on-chain |
+| `checkDeal(dealId)` | Check conditions → release/refund/pending |
+
+#### verifyAndRegisterDeal
+
+**Input:** Deal params + signatures from both parties + public keys
+
+**Verifies:**
+1. Publisher signature valid (matches publisher address)
+2. Advertiser signature valid (matches advertiser address)
+3. Deposit >= expected amount at escrow address
+4. Post exists via Telegram Bot API
+5. Content hash matches posted content
+
+**Action:** Calls `createDeal` on Deal Registry contract
+
+#### checkDeal
+
+| Condition | Action |
+|-----------|--------|
+| Duration passed AND content unchanged | **Release** to publisher |
+| Content changed/deleted | **Refund** to advertiser |
+| Duration not passed AND content unchanged | **Do nothing** (pending) |
 
 ### Off-Chain Responsibilities (Backend)
 
