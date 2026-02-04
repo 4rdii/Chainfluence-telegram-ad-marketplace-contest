@@ -39,11 +39,9 @@ export function computeContentHash(content: string): bigint {
  */
 export class TelegramBotApi {
   private botToken: string;
-  private verificationChatId: number; // Private chat/channel where bot forwards messages for verification
 
-  constructor(botToken: string, verificationChatId: number) {
+  constructor(botToken: string) {
     this.botToken = botToken;
-    this.verificationChatId = verificationChatId;
   }
 
   private async request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
@@ -67,10 +65,10 @@ export class TelegramBotApi {
    * Forward a message to verification chat to check if it exists
    * Returns the forwarded message if successful
    */
-  async forwardMessage(channelId: number, messageId: number): Promise<Message | null> {
+  async forwardMessage(channelId: number, messageId: number, verificationChatId: number): Promise<Message | null> {
     try {
       return await this.request<Message>('forwardMessage', {
-        chat_id: this.verificationChatId,
+        chat_id: verificationChatId,
         from_chat_id: channelId,
         message_id: messageId,
       });
@@ -87,10 +85,10 @@ export class TelegramBotApi {
    * Copy a message (doesn't show "forwarded from")
    * Alternative to forwardMessage for verification
    */
-  async copyMessage(channelId: number, messageId: number): Promise<{ message_id: number } | null> {
+  async copyMessage(channelId: number, messageId: number, verificationChatId: number): Promise<{ message_id: number } | null> {
     try {
       return await this.request<{ message_id: number }>('copyMessage', {
-        chat_id: this.verificationChatId,
+        chat_id: verificationChatId,
         from_chat_id: channelId,
         message_id: messageId,
       });
@@ -105,10 +103,10 @@ export class TelegramBotApi {
   /**
    * Delete a message from verification chat (cleanup after verification)
    */
-  async deleteMessage(messageId: number): Promise<void> {
+  async deleteMessage(messageId: number, verificationChatId: number): Promise<void> {
     try {
       await this.request('deleteMessage', {
-        chat_id: this.verificationChatId,
+        chat_id: verificationChatId,
         message_id: messageId,
       });
     } catch {
@@ -122,10 +120,11 @@ export class TelegramBotApi {
   async verifyContent(
     channelId: number,
     postId: number,
-    expectedContentHash: bigint
+    expectedContentHash: bigint,
+    verificationChatId: number
   ): Promise<ContentVerification> {
     // Forward the message to our verification chat
-    const forwarded = await this.forwardMessage(channelId, postId);
+    const forwarded = await this.forwardMessage(channelId, postId, verificationChatId);
 
     if (!forwarded) {
       return { exists: false };
@@ -136,7 +135,7 @@ export class TelegramBotApi {
     const actualHash = computeContentHash(content);
 
     // Cleanup: delete the forwarded message
-    await this.deleteMessage(forwarded.message_id);
+    await this.deleteMessage(forwarded.message_id, verificationChatId);
 
     return {
       exists: true,
@@ -152,9 +151,10 @@ export class TelegramBotApi {
   async checkPostStatus(
     channelId: number,
     postId: number,
-    expectedContentHash: bigint
+    expectedContentHash: bigint,
+    verificationChatId: number
   ): Promise<'valid' | 'deleted' | 'modified'> {
-    const verification = await this.verifyContent(channelId, postId, expectedContentHash);
+    const verification = await this.verifyContent(channelId, postId, expectedContentHash, verificationChatId);
 
     if (!verification.exists) {
       return 'deleted';

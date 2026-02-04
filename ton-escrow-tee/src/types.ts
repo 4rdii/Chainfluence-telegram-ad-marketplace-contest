@@ -20,6 +20,7 @@ export interface VerifyAndRegisterInput {
   publisherPublicKey: Buffer; // Publisher's public key (to verify address match)
   advertiserSignature: Buffer; // Advertiser's ed25519 signature of params
   advertiserPublicKey: Buffer; // Advertiser's public key (to verify address match)
+  verificationChatId: number; // Telegram chat ID for content verification
 }
 
 // Result of checkDeal

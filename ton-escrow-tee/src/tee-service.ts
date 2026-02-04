@@ -16,7 +16,6 @@ import { createTonClient, withRetry, sleep } from './ton-client';
 export interface TeeServiceConfig {
   mnemonic: string;
   botToken: string;
-  verificationChatId: number;
   dealRegistryAddress: string;
   testnet?: boolean;
   tonApiKey?: string;
@@ -44,7 +43,7 @@ export class TeeService {
       testnet: config.testnet,
       apiKey: config.tonApiKey,
     });
-    this.botApi = new TelegramBotApi(config.botToken, config.verificationChatId);
+    this.botApi = new TelegramBotApi(config.botToken);
     this.dealRegistry = DealRegistry.createFromAddress(Address.parse(config.dealRegistryAddress));
   }
 
@@ -102,7 +101,7 @@ export class TeeService {
    * - Calls createDeal on Deal Registry contract
    */
   async verifyAndRegisterDeal(input: VerifyAndRegisterInput): Promise<{ success: boolean; error?: string; txHash?: string }> {
-    const { params, publisherSignature, publisherPublicKey, advertiserSignature, advertiserPublicKey } = input;
+    const { params, publisherSignature, publisherPublicKey, advertiserSignature, advertiserPublicKey, verificationChatId } = input;
 
     // 1. Verify publisher signature
     const publisherCheck = verifyPartySignature(
@@ -141,7 +140,8 @@ export class TeeService {
     const contentStatus = await this.botApi.checkPostStatus(
       params.channelId,
       params.postId,
-      params.contentHash
+      params.contentHash,
+      verificationChatId
     );
 
     if (contentStatus === 'deleted') {
@@ -226,7 +226,7 @@ export class TeeService {
    * - If content changed/deleted → Refund to advertiser
    * - If duration not passed AND content unchanged → Do nothing (pending)
    */
-  async checkDeal(dealId: number): Promise<CheckDealResult> {
+  async checkDeal(dealId: number, verificationChatId: number): Promise<CheckDealResult> {
     // 1. Get deal from registry
     const contract = this.client.open(this.dealRegistry);
     const deal = await contract.getDeal(BigInt(dealId));
@@ -239,7 +239,8 @@ export class TeeService {
     const contentStatus = await this.botApi.checkPostStatus(
       deal.channelId,
       deal.postId,
-      deal.contentHash
+      deal.contentHash,
+      verificationChatId
     );
 
     const now = Math.floor(Date.now() / 1000);

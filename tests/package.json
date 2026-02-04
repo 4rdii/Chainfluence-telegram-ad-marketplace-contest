@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-    "test:unit": "jest --testPathPattern=unit",
-    "test:integration": "jest --testPathPattern=integration"
+    "test:unit": "jest unit",
+    "test:integration": "jest integration"
   },
   "keywords": ["ton", "tee", "escrow"],
   "author": "",

@@ -40,7 +40,6 @@ let teeService: TeeService | null = null;
 async function initializeTeeService(): Promise<boolean> {
   const mnemonic = process.env.MNEMONIC;
   const botToken = process.env.BOT_TOKEN;
-  const verificationChatId = process.env.VERIFICATION_CHAT_ID;
   const dealRegistryAddress = process.env.DEAL_REGISTRY_ADDRESS;
 
   if (!mnemonic) {
@@ -49,11 +48,10 @@ async function initializeTeeService(): Promise<boolean> {
   }
 
   // If all env vars present, initialize full service
-  if (botToken && verificationChatId && dealRegistryAddress) {
+  if (botToken && dealRegistryAddress) {
     teeService = new TeeService({
       mnemonic,
       botToken,
-      verificationChatId: parseInt(verificationChatId),
       dealRegistryAddress,
       testnet: process.env.TESTNET === 'true',
       tonApiKey: process.env.TONCENTER_API_KEY,
@@ -61,7 +59,7 @@ async function initializeTeeService(): Promise<boolean> {
     await teeService.initialize();
     console.log('TEE Service fully initialized');
   } else {
-    console.log('Running in wallet-only mode (missing BOT_TOKEN, VERIFICATION_CHAT_ID, or DEAL_REGISTRY_ADDRESS)');
+    console.log('Running in wallet-only mode (missing BOT_TOKEN or DEAL_REGISTRY_ADDRESS)');
   }
 
   return true;
@@ -123,7 +121,11 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
       return res.status(503).json({ error: 'TEE service not fully initialized. Missing env vars.' });
     }
 
-    const { params, publisherSignature, publisherPublicKey, advertiserSignature, advertiserPublicKey } = req.body;
+    const { params, publisherSignature, publisherPublicKey, advertiserSignature, advertiserPublicKey, verificationChatId } = req.body;
+
+    if (!verificationChatId || typeof verificationChatId !== 'number') {
+      return res.status(400).json({ error: 'verificationChatId is required and must be a number' });
+    }
 
     // Parse addresses from strings
     const dealParams = {
@@ -140,6 +142,7 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
       publisherPublicKey: Buffer.from(publisherPublicKey, 'hex'),
       advertiserSignature: Buffer.from(advertiserSignature, 'hex'),
       advertiserPublicKey: Buffer.from(advertiserPublicKey, 'hex'),
+      verificationChatId,
     });
 
     res.json(result);
@@ -158,13 +161,17 @@ app.post('/checkDeal', async (req: Request, res: Response) => {
       return res.status(503).json({ error: 'TEE service not fully initialized. Missing env vars.' });
     }
 
-    const { dealId } = req.body;
+    const { dealId, verificationChatId } = req.body;
 
     if (typeof dealId !== 'number') {
       return res.status(400).json({ error: 'dealId must be a number' });
     }
 
-    const result = await teeService.checkDeal(dealId);
+    if (!verificationChatId || typeof verificationChatId !== 'number') {
+      return res.status(400).json({ error: 'verificationChatId is required and must be a number' });
+    }
+
+    const result = await teeService.checkDeal(dealId, verificationChatId);
     res.json(result);
   } catch (error) {
     console.error('checkDeal error:', error);
