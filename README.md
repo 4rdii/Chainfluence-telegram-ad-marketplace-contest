@@ -126,6 +126,91 @@ See [ton-escrow-tee/docs/](ton-escrow-tee/docs/) for detailed documentation:
 - [Roadmap](ton-escrow-tee/docs/ROADMAP.md) - Development milestones
 - [Smart Contract Design](ton-escrow-tee/docs/SMART_CONTRACT_DESIGN.md) - Contract architecture
 
+## TODO
+
+### Refactor: Make checkPostStatus Use Contract Data
+
+- [ ] **Refactor `checkPostStatus` to always fetch from contract**
+
+  **Current Issue:** `checkPostStatus` accepts `channelId`, `postId`, and `contentHash` as parameters. This creates inconsistency:
+  - In `verifyAndRegisterDeal`: Uses user-provided params (not yet on-chain)
+  - In `checkDeal`: Uses contract data (source of truth)
+
+  **Solution:** Create a clear separation between low-level and high-level verification:
+  1. Keep `verifyContent()` in `bot-api.ts` - Low-level method that takes explicit parameters
+  2. Create `checkDealStatus()` in `tee-service.ts` - High-level method that fetches from contract
+
+  **Implementation:**
+  ```typescript
+  // In tee-service.ts
+  async checkDealStatus(dealId: number, verificationChatId: number) {
+    // 1. Fetch deal from contract (source of truth)
+    const contract = this.client.open(this.dealRegistry);
+    const deal = await contract.getDeal(BigInt(dealId));
+
+    if (!deal) {
+      throw new Error('Deal not found in registry');
+    }
+
+    // 2. Verify using contract data
+    return await this.botApi.checkPostStatus(
+      deal.channelId,
+      deal.postId,
+      deal.contentHash,
+      verificationChatId
+    );
+  }
+  ```
+
+  **Files to modify:**
+  - `ton-escrow-tee/src/tee-service.ts` - Add `checkDealStatus()` method
+  - Update `checkDeal()` to use the new method
+  - Keep `verifyAndRegisterDeal()` using direct params (since deal not registered yet)
+
+  **Why this matters:**
+  - All fields (channelId, postId, contentHash) ARE stored in contract (lines 209-211 of tee-service.ts)
+  - Contract is the single source of truth after registration
+  - Prevents potential security issues from accepting user-provided data
+
+### Code Cleanup
+
+- [ ] **Remove unused `createSenderFromWallet` function**
+
+  **Issue:** The `createSenderFromWallet()` helper function in `ton-escrow-tee/src/deal-registry.ts` (lines 96-121) is defined but never used anywhere in the codebase.
+
+  **Current situation:**
+  - The function was created to provide a cleaner way to interact with contract methods
+  - The TEE service manually builds and sends transactions instead (tee-service.ts:160-178)
+  - No tests or other code references this function
+
+  **Action:** Remove the dead code from `ton-escrow-tee/src/deal-registry.ts`
+
+  **Alternative:** If cleaner contract interactions are desired, refactor `tee-service.ts` to use this helper instead of manual transaction building.
+
+### Image Verification Enhancement
+
+- [ ] **Implement hybrid hash approach for image posts**
+
+  **Current Issue:** The TEE only hashes text/caption content. Image-only posts (without captions) result in empty string hashes, making them unverifiable.
+
+  **Solution:** Implement a hybrid content hashing approach that combines:
+  - `file_unique_id` - Telegram's stable file identifier
+  - `file_size` - File size in bytes
+  - `caption` - Optional text caption (if present)
+
+  **Implementation Notes:**
+  - Update `computeContentHash()` in `ton-escrow-tee/src/bot-api.ts` to handle `Message` objects with photos
+  - When `message.photo` exists, extract the largest photo size (`photo[photo.length - 1]`)
+  - Create combined hash: `SHA256(file_unique_id + file_size + (caption || ''))`
+  - This avoids downloading full images while still providing content verification
+  - Update frontend to compute the same hash when creating deals for image posts
+
+  **Files to modify:**
+  - `ton-escrow-tee/src/bot-api.ts` - Add photo handling to `computeContentHash()`
+  - Frontend deal creation - Match the hash computation logic
+
+  **Alternative (more robust but slower):** Download actual image bytes and hash them using `getFile` + `downloadFile` APIs. This provides true content verification but requires more bandwidth.
+
 ## License
 
 MIT
