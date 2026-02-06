@@ -1,7 +1,7 @@
 import { User, PublisherStats, AdvertiserStats, Channel } from '../../types';
-import { Wallet, Copy, TrendingUp, DollarSign, Star, Award } from 'lucide-react';
+import { TrendingUp, DollarSign, Star, Award } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useState } from 'react';
+import { WalletButton } from '../WalletButton';
 
 interface ProfileScreenProps {
   user: User;
@@ -12,15 +12,6 @@ interface ProfileScreenProps {
 }
 
 export function ProfileScreen({ user, publisherStats, advertiserStats, channels, onAddChannel }: ProfileScreenProps) {
-  const [walletConnected, setWalletConnected] = useState(!!user.walletAddress);
-
-  const copyAddress = () => {
-    if (user.walletAddress) {
-      navigator.clipboard.writeText(user.walletAddress);
-      // In a real app, show a toast notification
-    }
-  };
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -64,55 +55,7 @@ export function ProfileScreen({ user, publisherStats, advertiserStats, channels,
 
       <div className="p-4 space-y-6">
         {/* Wallet Section */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Wallet className="w-5 h-5 text-primary" />
-            <h2 className="font-semibold">Wallet</h2>
-          </div>
-          
-          {walletConnected ? (
-            <>
-              <div className="flex items-center justify-between mb-3 p-3 bg-background rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">Connected Address</p>
-                  <p className="text-sm font-mono truncate">{user.walletAddress}</p>
-                </div>
-                <button
-                  onClick={copyAddress}
-                  className="ml-2 p-2 hover:bg-accent rounded-lg transition-colors"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-muted-foreground">Balance</span>
-                <span className="text-2xl font-semibold text-[var(--ton-blue)]">
-                  {user.walletBalance.toFixed(2)} <span className="text-base">TON</span>
-                </span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setWalletConnected(false)}
-                className="w-full"
-              >
-                Disconnect Wallet
-              </Button>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground mb-4">
-                Connect your TON wallet to start using Chainfluence
-              </p>
-              <Button
-                onClick={() => setWalletConnected(true)}
-                className="w-full bg-primary text-primary-foreground"
-              >
-                Connect TON Wallet
-              </Button>
-            </>
-          )}
-        </div>
+        <WalletButton />
 
         {/* Publisher Stats */}
         {user.roles.includes('publisher') && publisherStats && (

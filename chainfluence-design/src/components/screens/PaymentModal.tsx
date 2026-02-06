@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { X, Shield, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, Shield, Loader2, CheckCircle2, AlertTriangle, Wallet } from 'lucide-react';
+import { useTonConnectUI, useTonWallet, toUserFriendlyAddress } from '@tonconnect/ui-react';
+
+// Convert TON to nanoTON (1 TON = 10^9 nanoTON)
+const toNano = (amount: string | number): string => {
+  const ton = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return Math.floor(ton * 1_000_000_000).toString();
+};
 
 interface PaymentModalProps {
   amount: number;
@@ -9,7 +16,7 @@ interface PaymentModalProps {
   onClose: () => void;
 }
 
-type PaymentState = 'confirm' | 'processing' | 'success' | 'error';
+type PaymentState = 'connect' | 'confirm' | 'processing' | 'success' | 'error';
 
 export function PaymentModal({
   amount,
@@ -18,19 +25,47 @@ export function PaymentModal({
   onConfirm,
   onClose,
 }: PaymentModalProps) {
-  const [state, setState] = useState<PaymentState>('confirm');
+  const [tonConnectUI] = useTonConnectUI();
+  const wallet = useTonWallet();
+  const [state, setState] = useState<PaymentState>(wallet ? 'confirm' : 'connect');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleConfirm = () => {
+  const handleConnect = () => {
+    tonConnectUI.openModal();
+  };
+
+  const handleConfirm = async () => {
+    if (!wallet) {
+      setState('connect');
+      return;
+    }
+
     setState('processing');
-    // Simulate TON Connect flow
-    setTimeout(() => {
-      // Simulate 80% success rate for demo
-      if (Math.random() > 0.2) {
-        setState('success');
-      } else {
-        setState('error');
+    setErrorMessage('');
+
+    try {
+      // Build the transaction
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 600, // 10 minutes
+        messages: [
+          {
+            address: escrowAddress,
+            amount: toNano(amount.toString()).toString(),
+            // payload: '' // Optional: Add comment or contract call data
+          },
+        ],
+      };
+
+      // Send transaction via TON Connect
+      await tonConnectUI.sendTransaction(transaction);
+      setState('success');
+    } catch (error) {
+      console.error('Transaction error:', error);
+      setState('error');
+      if (error instanceof Error) {
+        setErrorMessage(error.message);
       }
-    }, 3000);
+    }
   };
 
   const handleContinue = () => {
@@ -39,7 +74,8 @@ export function PaymentModal({
   };
 
   const handleRetry = () => {
-    setState('confirm');
+    setState(wallet ? 'confirm' : 'connect');
+    setErrorMessage('');
   };
 
   const truncateAddress = (addr: string) => {
@@ -47,16 +83,75 @@ export function PaymentModal({
     return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
   };
 
+  // Update state when wallet connects
+  if (wallet && state === 'connect') {
+    setState('confirm');
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={state === 'confirm' ? onClose : undefined}
+        onClick={state === 'confirm' || state === 'connect' ? onClose : undefined}
       />
 
       {/* Modal */}
       <div className="relative w-full max-w-md bg-card border-t border-border rounded-t-3xl overflow-hidden">
+        {/* Connect wallet state */}
+        {state === 'connect' && (
+          <div className="p-6 pb-10">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Connect Wallet</h2>
+              <button
+                onClick={onClose}
+                className="p-1 hover:bg-accent rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Wallet icon */}
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-[var(--ton-blue)]/15 flex items-center justify-center mx-auto mb-4">
+                <Wallet className="w-8 h-8 text-[var(--ton-blue)]" />
+              </div>
+              <p className="text-lg font-semibold mb-2">Wallet Required</p>
+              <p className="text-sm text-muted-foreground">
+                Connect your TON wallet to complete this payment
+              </p>
+            </div>
+
+            {/* Payment preview */}
+            <div className="bg-muted/30 rounded-xl p-4 space-y-2 mb-6">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Amount</span>
+                <span className="text-sm font-semibold">{amount.toFixed(2)} TON</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">For</span>
+                <span className="text-sm">{dealLabel}</span>
+              </div>
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={handleConnect}
+              className="w-full bg-[var(--ton-blue)] text-white rounded-xl py-4 font-semibold text-base flex items-center justify-center gap-2 hover:bg-[var(--ton-blue)]/90 transition-colors"
+            >
+              <Wallet className="w-5 h-5" />
+              Connect TON Wallet
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Confirm state */}
         {state === 'confirm' && (
           <div className="p-6 pb-10">
@@ -89,9 +184,17 @@ export function PaymentModal({
             {/* Details */}
             <div className="bg-muted/30 rounded-xl p-4 space-y-3 mb-6">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">To</span>
+                <span className="text-sm text-muted-foreground">To (Escrow)</span>
                 <span className="text-sm font-mono">
                   {truncateAddress(escrowAddress)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">From</span>
+                <span className="text-sm font-mono">
+                  {wallet?.account?.address
+                    ? truncateAddress(toUserFriendlyAddress(wallet.account.address))
+                    : 'Not connected'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -113,7 +216,7 @@ export function PaymentModal({
               onClick={handleConfirm}
               className="w-full bg-primary text-primary-foreground rounded-xl py-4 font-semibold text-base hover:bg-primary/90 transition-colors"
             >
-              Confirm & Open Wallet
+              Confirm & Sign Transaction
             </button>
             <button
               onClick={onClose}
@@ -192,7 +295,7 @@ export function PaymentModal({
               </div>
               <h2 className="text-lg font-semibold mb-2">Transaction Failed</h2>
               <p className="text-sm text-muted-foreground">
-                The transaction was rejected or timed out. Please try again.
+                {errorMessage || 'The transaction was rejected or timed out. Please try again.'}
               </p>
             </div>
             <button

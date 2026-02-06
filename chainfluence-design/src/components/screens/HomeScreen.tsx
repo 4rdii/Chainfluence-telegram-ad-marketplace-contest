@@ -2,6 +2,7 @@ import { Bell, TrendingUp, Clock, Coins } from 'lucide-react';
 import { User, Deal, Notification, Channel } from '../../types';
 import { mockChannels } from '../../lib/mock-data';
 import { StatusBadge } from '../StatusBadge';
+import { WalletButton } from '../WalletButton';
 
 interface HomeScreenProps {
   user: User;
@@ -49,24 +50,27 @@ export function HomeScreen({ user, deals, notifications, onNotificationClick, on
     <div className="pb-20">
       {/* Header */}
       <div className="bg-card border-b border-border p-4">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <svg className="w-8 h-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
             </svg>
             <h1 className="text-xl font-semibold">Chainfluence</h1>
           </div>
-          <button 
-            onClick={onNotificationClick}
-            className="relative p-2 hover:bg-accent rounded-lg transition-colors"
-          >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 bg-[var(--error-red)] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                {unreadCount}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <WalletButton variant="compact" />
+            <button
+              onClick={onNotificationClick}
+              className="relative p-2 hover:bg-accent rounded-lg transition-colors"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 bg-[var(--error-red)] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">Trustless Telegram Advertising</p>
       </div>
