@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BottomNav, TabType } from './components/BottomNav';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { ChannelsScreen } from './components/screens/ChannelsScreen';
@@ -27,7 +27,24 @@ import {
   mockPublisherStats,
   mockAdvertiserStats
 } from './lib/mock-data';
-import { Channel, Campaign, Deal, UserRole } from './types';
+import { Channel, Campaign, Deal, UserRole, User } from './types';
+import { getTelegramUser, initTelegramWebApp, isRunningInTelegram, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
+
+// Create user from Telegram data
+function createUserFromTelegram(): User | null {
+  const tgUser = getTelegramUser();
+  if (!tgUser) return null;
+
+  return {
+    id: tgUser.id.toString(),
+    username: tgUser.username ? `@${tgUser.username}` : `user_${tgUser.id}`,
+    displayName: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' '),
+    avatar: tgUser.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(tgUser.first_name)}&background=0088CC&color=fff`,
+    roles: [], // Will be set during onboarding
+    walletBalance: 0,
+    memberSince: '', // Backend will set this when user first registers
+  };
+}
 
 type Screen =
   | { type: 'splash' }
@@ -45,7 +62,11 @@ type Screen =
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ type: 'splash' });
-  const [user, setUser] = useState(mockUser);
+  const [user, setUser] = useState<User>(() => {
+    // Try to get Telegram user on initial load
+    const tgUser = createUserFromTelegram();
+    return tgUser || mockUser;
+  });
   const [notifications, setNotifications] = useState(mockNotifications);
   const [channels] = useState(mockChannels);
   const [campaigns, setCampaigns] = useState(mockCampaigns);
@@ -56,6 +77,78 @@ export default function App() {
     escrowAddress: string;
     dealLabel: string;
   } | null>(null);
+
+  // Initialize Telegram WebApp
+  useEffect(() => {
+    initTelegramWebApp();
+
+    // If running in Telegram and no user yet, try to get user data
+    if (isRunningInTelegram()) {
+      const tgUser = createUserFromTelegram();
+      if (tgUser) {
+        setUser(prev => ({
+          ...tgUser,
+          roles: prev.roles, // Preserve roles if already set
+        }));
+      }
+    }
+  }, []);
+
+  // Manage Telegram Back Button
+  useEffect(() => {
+    // Screens that should show the back button
+    const screensWithBackButton = [
+      'channelDetail',
+      'campaignDetail',
+      'dealDetail',
+      'dealCompletion',
+      'addChannel',
+      'createCampaign',
+      'notifications',
+      'myCampaigns',
+      'myOffers',
+    ];
+
+    if (screensWithBackButton.includes(screen.type)) {
+      const handleBack = () => {
+        hapticImpact('light');
+        switch (screen.type) {
+          case 'channelDetail':
+            setScreen({ type: 'tab', tab: 'channels' });
+            break;
+          case 'campaignDetail':
+            setScreen({ type: 'tab', tab: 'campaigns' });
+            break;
+          case 'dealDetail':
+          case 'dealCompletion':
+            setScreen({ type: 'tab', tab: 'deals' });
+            break;
+          case 'addChannel':
+          case 'myCampaigns':
+          case 'myOffers':
+            setScreen({ type: 'tab', tab: 'profile' });
+            break;
+          case 'createCampaign':
+            setScreen({ type: 'tab', tab: 'campaigns' });
+            break;
+          case 'notifications':
+            setScreen({ type: 'tab', tab: 'home' });
+            break;
+          default:
+            setScreen({ type: 'tab', tab: 'home' });
+        }
+      };
+
+      showBackButton(handleBack);
+    } else {
+      hideBackButton();
+    }
+
+    // Cleanup: hide back button when component unmounts or screen changes
+    return () => {
+      hideBackButton();
+    };
+  }, [screen.type]);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
@@ -179,9 +272,9 @@ export default function App() {
   };
 
   // Deal completion
-  const handleLeaveReview = (dealId: string) => {
-    console.log('Leave review for:', dealId);
-    handleBackToTab('deals');
+  const handleLeaveReview = (dealId: string, rating: number) => {
+    console.log('Leave review for:', dealId, 'Rating:', rating);
+    // In real app, send to backend
   };
 
   // Derived

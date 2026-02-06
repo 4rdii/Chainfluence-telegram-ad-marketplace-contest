@@ -1,4 +1,5 @@
 import { Home, Megaphone, Rocket, Handshake, User } from 'lucide-react';
+import { hapticSelection } from '../lib/telegram';
 
 export type TabType = 'home' | 'channels' | 'campaigns' | 'deals' | 'profile';
 
@@ -17,17 +18,22 @@ export function BottomNav({ activeTab, onTabChange, notificationCount = 0 }: Bot
     { id: 'profile' as TabType, icon: User, label: 'Profile' },
   ];
 
+  const handleTabClick = (tabId: TabType) => {
+    hapticSelection();
+    onTabChange(tabId);
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
       <div className="max-w-md mx-auto flex justify-around items-center h-16 px-2">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
-          
+
           return (
             <button
               key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => handleTabClick(tab.id)}
               className={`flex flex-col items-center justify-center flex-1 h-full transition-colors relative ${
                 isActive ? 'text-primary' : 'text-muted-foreground'
               }`}

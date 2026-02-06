@@ -32,9 +32,11 @@ export function ProfileScreen({ user, publisherStats, advertiserStats, channels,
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-semibold mb-1">{user.displayName}</h1>
             <p className="text-muted-foreground mb-2">{user.username}</p>
-            <p className="text-sm text-muted-foreground">
-              Member since {formatDate(user.memberSince)}
-            </p>
+            {user.memberSince && (
+              <p className="text-sm text-muted-foreground">
+                Member since {formatDate(user.memberSince)}
+              </p>
+            )}
           </div>
         </div>
 

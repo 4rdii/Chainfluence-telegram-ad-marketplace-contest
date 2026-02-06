@@ -1,12 +1,13 @@
 import { ArrowLeft, CheckCircle2, Undo2, ExternalLink, Star, Copy } from 'lucide-react';
 import { useState } from 'react';
 import { Deal, Channel } from '../../types';
+import { hapticImpact, hapticNotification } from '../../lib/telegram';
 
 interface DealCompletionScreenProps {
   deal: Deal;
   channel: Channel;
   onBack: () => void;
-  onLeaveReview: (dealId: string) => void;
+  onLeaveReview: (dealId: string, rating: number) => void;
   onBackToDeals: () => void;
 }
 
@@ -18,8 +19,19 @@ export function DealCompletionScreen({
   onBackToDeals,
 }: DealCompletionScreenProps) {
   const [copied, setCopied] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [hasReviewed, setHasReviewed] = useState(false);
   const isReleased = deal.status === 'RELEASED';
   const isRefunded = deal.status === 'REFUNDED';
+
+  const handleStarClick = (starValue: number) => {
+    hapticImpact('medium');
+    setRating(starValue);
+    setHasReviewed(true);
+    hapticNotification('success');
+    onLeaveReview(deal.id, starValue);
+  };
 
   const txHash = deal.timeline.find(
     (t) => t.step === 'Verified & Released' || t.details?.includes('TON')
@@ -46,7 +58,7 @@ export function DealCompletionScreen({
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-8">
+      <div className="flex-1 flex flex-col items-center px-4 pt-4">
         {/* Icon */}
         {isReleased && (
           <>
@@ -180,24 +192,47 @@ export function DealCompletionScreen({
         </div>
       </div>
 
-      {/* Bottom buttons */}
-      <div className="p-6 pb-10 space-y-3">
-        {isReleased && (
-          <button
-            onClick={() => onLeaveReview(deal.id)}
-            className="w-full bg-primary text-primary-foreground rounded-xl py-4 font-semibold text-base flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
-          >
-            <Star className="w-5 h-5" />
-            Leave a Review
-          </button>
-        )}
+      {/* Star Rating Section */}
+      {isReleased && (
+        <div className="px-4 pb-4">
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <p className="text-center text-sm text-muted-foreground mb-3">
+              {hasReviewed ? 'Thanks for your feedback!' : 'How was your experience?'}
+            </p>
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => !hasReviewed && handleStarClick(star)}
+                  onMouseEnter={() => !hasReviewed && setHoveredRating(star)}
+                  onMouseLeave={() => !hasReviewed && setHoveredRating(0)}
+                  disabled={hasReviewed}
+                  className={`p-1 transition-all ${hasReviewed ? 'cursor-default' : 'cursor-pointer hover:scale-110 active:scale-95'}`}
+                >
+                  <Star
+                    className={`w-10 h-10 transition-colors ${
+                      star <= (hoveredRating || rating)
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-muted-foreground/30'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            {hasReviewed && (
+              <p className="text-center text-xs text-muted-foreground mt-3">
+                You rated this deal {rating} star{rating !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bottom button */}
+      <div className="p-4 pb-8">
         <button
           onClick={onBackToDeals}
-          className={`w-full rounded-xl py-4 font-semibold text-base transition-colors ${
-            isReleased
-              ? 'bg-muted text-foreground hover:bg-muted/80'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'
-          }`}
+          className="w-full bg-muted text-foreground hover:bg-muted/80 rounded-xl py-4 font-semibold text-base transition-colors"
         >
           Back to Deals
         </button>
