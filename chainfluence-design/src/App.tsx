@@ -11,33 +11,51 @@ import { DealDetailScreen } from './components/screens/DealDetailScreen';
 import { AddChannelScreen } from './components/screens/AddChannelScreen';
 import { CreateCampaignScreen } from './components/screens/CreateCampaignScreen';
 import { NotificationsScreen } from './components/screens/NotificationsScreen';
-import { 
-  mockUser, 
-  mockChannels, 
-  mockCampaigns, 
-  mockDeals, 
+import { SplashScreen } from './components/screens/SplashScreen';
+import { RoleSelectionScreen } from './components/screens/RoleSelectionScreen';
+import { MyCampaignsScreen } from './components/screens/MyCampaignsScreen';
+import { MyOffersScreen } from './components/screens/MyOffersScreen';
+import { DealCompletionScreen } from './components/screens/DealCompletionScreen';
+import { PaymentModal } from './components/screens/PaymentModal';
+import {
+  mockUser,
+  mockChannels,
+  mockCampaigns,
+  mockDeals,
   mockNotifications,
+  mockOffers,
   mockPublisherStats,
   mockAdvertiserStats
 } from './lib/mock-data';
-import { Channel, Campaign, Deal } from './types';
+import { Channel, Campaign, Deal, UserRole } from './types';
 
-type Screen = 
+type Screen =
+  | { type: 'splash' }
+  | { type: 'roleSelection' }
   | { type: 'tab'; tab: TabType }
   | { type: 'channelDetail'; channel: Channel }
   | { type: 'campaignDetail'; campaign: Campaign }
   | { type: 'dealDetail'; deal: Deal }
+  | { type: 'dealCompletion'; deal: Deal }
   | { type: 'addChannel' }
   | { type: 'createCampaign' }
-  | { type: 'notifications' };
+  | { type: 'notifications' }
+  | { type: 'myCampaigns' }
+  | { type: 'myOffers' };
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>({ type: 'tab', tab: 'home' });
-  const [user] = useState(mockUser);
+  const [screen, setScreen] = useState<Screen>({ type: 'splash' });
+  const [user, setUser] = useState(mockUser);
   const [notifications, setNotifications] = useState(mockNotifications);
   const [channels] = useState(mockChannels);
-  const [campaigns] = useState(mockCampaigns);
+  const [campaigns, setCampaigns] = useState(mockCampaigns);
   const [deals] = useState(mockDeals);
+  const [offers] = useState(mockOffers);
+  const [paymentModal, setPaymentModal] = useState<{
+    amount: number;
+    escrowAddress: string;
+    dealLabel: string;
+  } | null>(null);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
@@ -48,6 +66,7 @@ export default function App() {
     return user.roles[0] as 'publisher' | 'advertiser';
   };
 
+  // Navigation handlers
   const handleChannelClick = (channel: Channel) => {
     setScreen({ type: 'channelDetail', channel });
   };
@@ -57,9 +76,28 @@ export default function App() {
   };
 
   const handleDealClick = (deal: Deal) => {
-    setScreen({ type: 'dealDetail', deal });
+    if (deal.status === 'RELEASED' || deal.status === 'REFUNDED') {
+      setScreen({ type: 'dealCompletion', deal });
+    } else {
+      setScreen({ type: 'dealDetail', deal });
+    }
   };
 
+  const handleBackToTab = (tab: TabType = 'home') => {
+    setScreen({ type: 'tab', tab });
+  };
+
+  // Splash & onboarding
+  const handleGetStarted = () => {
+    setScreen({ type: 'roleSelection' });
+  };
+
+  const handleRoleSelected = (roles: UserRole[]) => {
+    setUser(prev => ({ ...prev, roles }));
+    setScreen({ type: 'tab', tab: 'home' });
+  };
+
+  // Notifications
   const handleNotificationClick = () => {
     setScreen({ type: 'notifications' });
   };
@@ -78,7 +116,7 @@ export default function App() {
     if (notification.relatedId) {
       const deal = deals.find(d => d.id === notification.relatedId);
       if (deal) {
-        setScreen({ type: 'dealDetail', deal });
+        handleDealClick(deal);
         return;
       }
       const campaign = campaigns.find(c => c.id === notification.relatedId);
@@ -89,35 +127,83 @@ export default function App() {
     }
   };
 
+  // Campaigns
   const handleCreateCampaign = () => {
     setScreen({ type: 'createCampaign' });
   };
 
+  const handleMyCampaigns = () => {
+    setScreen({ type: 'myCampaigns' });
+  };
+
+  const handlePauseCampaign = (campaignId: string) => {
+    setCampaigns(prev =>
+      prev.map(c => (c.id === campaignId ? { ...c, status: 'paused' as const } : c))
+    );
+  };
+
+  const handleResumeCampaign = (campaignId: string) => {
+    setCampaigns(prev =>
+      prev.map(c => (c.id === campaignId ? { ...c, status: 'active' as const } : c))
+    );
+  };
+
+  const handleDeleteCampaign = (campaignId: string) => {
+    setCampaigns(prev => prev.filter(c => c.id !== campaignId));
+  };
+
+  // Offers
+  const handleMyOffers = () => {
+    setScreen({ type: 'myOffers' });
+  };
+
+  // Channel
   const handleAddChannel = () => {
     setScreen({ type: 'addChannel' });
   };
 
-  const handleBackToTab = (tab: TabType = 'home') => {
-    setScreen({ type: 'tab', tab });
-  };
-
   const handleBookAdSlot = (channel: Channel) => {
-    console.log('Book ad slot for:', channel);
-    // In a real app, navigate to booking screen
+    const cheapest = channel.pricing.find(p => p.enabled);
+    if (cheapest) {
+      const fee = cheapest.price * 0.05;
+      setPaymentModal({
+        amount: cheapest.price + fee,
+        escrowAddress: 'UQC0CO7RjXK4E8ngGJJnTon...',
+        dealLabel: `${channel.name} - ${cheapest.format}`,
+      });
+    }
   };
 
   const handleSubmitOffer = (channelId: string, format: string, price: number, date: string) => {
     console.log('Submit offer:', { channelId, format, price, date });
-    // In a real app, submit to backend
   };
 
+  // Deal completion
+  const handleLeaveReview = (dealId: string) => {
+    console.log('Leave review for:', dealId);
+    handleBackToTab('deals');
+  };
+
+  // Derived
   const userChannels = channels.filter(c => c.publisherId === user.id);
+  const userCampaigns = campaigns.filter(c => c.advertiserId === user.id);
+  const userOffers = offers.filter(o => o.publisherId === user.id);
   const activeTab = screen.type === 'tab' ? screen.tab : 'home';
 
   return (
     <div className="dark min-h-screen bg-background text-foreground">
       {/* Main Content */}
       <div className="max-w-md mx-auto min-h-screen">
+        {/* Onboarding */}
+        {screen.type === 'splash' && (
+          <SplashScreen onGetStarted={handleGetStarted} />
+        )}
+
+        {screen.type === 'roleSelection' && (
+          <RoleSelectionScreen user={user} onComplete={handleRoleSelected} />
+        )}
+
+        {/* Main tabs */}
         {screen.type === 'tab' && screen.tab === 'home' && (
           <HomeScreen
             user={user}
@@ -162,6 +248,7 @@ export default function App() {
           />
         )}
 
+        {/* Detail screens */}
         {screen.type === 'channelDetail' && (
           <ChannelDetailScreen
             channel={screen.channel}
@@ -188,6 +275,17 @@ export default function App() {
           />
         )}
 
+        {screen.type === 'dealCompletion' && (
+          <DealCompletionScreen
+            deal={screen.deal}
+            channel={channels.find(c => c.id === screen.deal.channelId)!}
+            onBack={() => handleBackToTab('deals')}
+            onLeaveReview={handleLeaveReview}
+            onBackToDeals={() => handleBackToTab('deals')}
+          />
+        )}
+
+        {/* Creation flows */}
         {screen.type === 'addChannel' && (
           <AddChannelScreen
             onBack={() => handleBackToTab('profile')}
@@ -202,6 +300,7 @@ export default function App() {
           />
         )}
 
+        {/* Notifications */}
         {screen.type === 'notifications' && (
           <NotificationsScreen
             notifications={notifications}
@@ -209,6 +308,33 @@ export default function App() {
             onNotificationClick={handleNotificationItemClick}
             onMarkAllRead={handleMarkAllRead}
             onMarkRead={handleMarkRead}
+          />
+        )}
+
+        {/* My Campaigns (advertiser) */}
+        {screen.type === 'myCampaigns' && (
+          <MyCampaignsScreen
+            campaigns={userCampaigns}
+            onBack={() => handleBackToTab('profile')}
+            onCampaignClick={handleCampaignClick}
+            onCreateCampaign={handleCreateCampaign}
+            onPause={handlePauseCampaign}
+            onResume={handleResumeCampaign}
+            onDelete={handleDeleteCampaign}
+          />
+        )}
+
+        {/* My Offers (publisher) */}
+        {screen.type === 'myOffers' && (
+          <MyOffersScreen
+            offers={userOffers}
+            campaigns={campaigns}
+            channels={channels}
+            onBack={() => handleBackToTab('profile')}
+            onOfferClick={(offer) => {
+              const campaign = campaigns.find(c => c.id === offer.campaignId);
+              if (campaign) setScreen({ type: 'campaignDetail', campaign });
+            }}
           />
         )}
       </div>
@@ -219,6 +345,17 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={(tab) => setScreen({ type: 'tab', tab })}
           notificationCount={unreadNotifications}
+        />
+      )}
+
+      {/* Payment Modal Overlay */}
+      {paymentModal && (
+        <PaymentModal
+          amount={paymentModal.amount}
+          escrowAddress={paymentModal.escrowAddress}
+          dealLabel={paymentModal.dealLabel}
+          onConfirm={() => setPaymentModal(null)}
+          onClose={() => setPaymentModal(null)}
         />
       )}
     </div>

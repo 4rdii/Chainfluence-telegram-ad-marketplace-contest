@@ -73,40 +73,48 @@ export function HomeScreen({ user, deals, notifications, onNotificationClick, on
 
       {/* Quick Stats */}
       <div className="p-4">
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-          <div className="bg-card border border-border rounded-xl p-4 min-w-[140px] flex-shrink-0">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-[var(--ton-blue)]" />
-              <span className="text-xs text-muted-foreground">Active Deals</span>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-[var(--ton-blue)]/15 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-[var(--ton-blue)]" />
+              </div>
             </div>
-            <p className="text-2xl font-semibold">{activeDeals.length}</p>
+            <p className="text-2xl font-bold">{activeDeals.length}</p>
+            <span className="text-xs text-muted-foreground">Active Deals</span>
           </div>
 
-          <div className="bg-card border border-border rounded-xl p-4 min-w-[140px] flex-shrink-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-[var(--pending-amber)]" />
-              <span className="text-xs text-muted-foreground">Pending Actions</span>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-[var(--pending-amber)]/15 flex items-center justify-center">
+                <Clock className="w-4 h-4 text-[var(--pending-amber)]" />
+              </div>
             </div>
-            <p className="text-2xl font-semibold">{pendingActions.length}</p>
+            <p className="text-2xl font-bold">{pendingActions.length}</p>
+            <span className="text-xs text-muted-foreground">Pending Actions</span>
           </div>
 
           {user.roles.includes('publisher') && (
-            <div className="bg-card border border-border rounded-xl p-4 min-w-[140px] flex-shrink-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Coins className="w-4 h-4 text-[var(--success-green)]" />
-                <span className="text-xs text-muted-foreground">Total Earned</span>
+            <div className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-[var(--success-green)]/15 flex items-center justify-center">
+                  <Coins className="w-4 h-4 text-[var(--success-green)]" />
+                </div>
               </div>
-              <p className="text-2xl font-semibold">{totalEarned.toFixed(1)} <span className="text-sm text-muted-foreground">TON</span></p>
+              <p className="text-2xl font-bold">{totalEarned.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">TON</span></p>
+              <span className="text-xs text-muted-foreground">Total Earned</span>
             </div>
           )}
 
           {user.roles.includes('advertiser') && (
-            <div className="bg-card border border-border rounded-xl p-4 min-w-[140px] flex-shrink-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Coins className="w-4 h-4 text-[var(--ton-blue)]" />
-                <span className="text-xs text-muted-foreground">Total Spent</span>
+            <div className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-[var(--ton-blue)]/15 flex items-center justify-center">
+                  <Coins className="w-4 h-4 text-[var(--ton-blue)]" />
+                </div>
               </div>
-              <p className="text-2xl font-semibold">{totalSpent.toFixed(1)} <span className="text-sm text-muted-foreground">TON</span></p>
+              <p className="text-2xl font-bold">{totalSpent.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">TON</span></p>
+              <span className="text-xs text-muted-foreground">Total Spent</span>
             </div>
           )}
         </div>
