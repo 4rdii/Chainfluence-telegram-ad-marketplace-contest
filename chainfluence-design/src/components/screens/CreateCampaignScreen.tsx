@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Upload } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Upload, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { ChannelCategory, AdFormat } from '../../types';
+import { api } from '../../lib/api';
 
 interface CreateCampaignScreenProps {
   onBack: () => void;
@@ -55,22 +56,23 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
     );
   };
 
-  const handleComplete = () => {
-    console.log('Campaign created:', {
-      title,
-      category,
-      description,
-      creativeText,
-      contentGuidelines,
-      budgetPerChannel,
-      totalBudget,
-      selectedFormats,
-      minSubscribers,
-      minEngagement,
-      selectedCategories,
-      deadline
-    });
-    onComplete();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleComplete = async () => {
+    setSubmitting(true);
+    try {
+      await api.campaigns.create({
+        title,
+        description,
+        category,
+        budget: (totalBudget || budgetPerChannel).toString(),
+      });
+      onComplete();
+    } catch {
+      console.error('Failed to create campaign');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderProgressBar = () => (
@@ -411,9 +413,13 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
               <Button
                 onClick={handleComplete}
                 className="flex-1 bg-primary text-primary-foreground"
-                disabled={!deadline || selectedFormats.length === 0}
+                disabled={!deadline || selectedFormats.length === 0 || submitting}
               >
-                Publish Campaign
+                {submitting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Publishing...</>
+                ) : (
+                  'Publish Campaign'
+                )}
               </Button>
             </div>
           </div>

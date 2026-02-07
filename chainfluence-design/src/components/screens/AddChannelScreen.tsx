@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { ChannelCategory, FormatPricing } from '../../types';
 import { CategoryChip } from '../CategoryChip';
+import { api } from '../../lib/api';
+import { adaptChannel } from '../../lib/adapters';
 
 interface AddChannelScreenProps {
   onBack: () => void;
@@ -28,9 +30,29 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
     'Entertainment', 'Lifestyle', 'Trading', 'NFT', 'Gaming'
   ];
 
-  const handleVerifyChannel = () => {
-    // In real app, verify bot is admin
-    setVerified(true);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const [channelTitle, setChannelTitle] = useState('');
+  const [channelSubs, setChannelSubs] = useState(0);
+  const [channelAvgViews, setChannelAvgViews] = useState(0);
+
+  const handleVerifyChannel = async () => {
+    setVerifying(true);
+    setVerifyError('');
+    const username = channelUsername.replace('@', '');
+    try {
+      const result = await api.channels.create({ username });
+      const adapted = adaptChannel(result);
+      setChannelTitle(adapted.name);
+      setChannelSubs(adapted.stats.subscribers);
+      setChannelAvgViews(adapted.stats.avgViews);
+      setVerified(true);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to verify channel';
+      setVerifyError(message);
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const updatePricing = (format: string, field: 'price' | 'enabled', value: number | boolean) => {
@@ -100,25 +122,40 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
             <Button
               onClick={handleVerifyChannel}
               className="w-full"
-              disabled={!channelUsername || verified}
+              disabled={!channelUsername || verified || verifying}
             >
-              {verified ? 'Verified ✓' : 'Verify Channel'}
+              {verifying ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying...</>
+              ) : verified ? (
+                'Verified ✓'
+              ) : (
+                'Verify Channel'
+              )}
             </Button>
+
+            {verifyError && (
+              <div className="bg-[var(--error-red)]/10 border border-[var(--error-red)]/30 rounded-lg p-4">
+                <p className="text-sm text-[var(--error-red)]">{verifyError}</p>
+              </div>
+            )}
 
             {verified && (
               <div className="bg-[var(--success-green)]/10 border border-[var(--success-green)]/30 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <img
-                    src="https://api.dicebear.com/7.x/shapes/svg?seed=MockChannel"
+                    src={`https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(channelTitle)}`}
                     alt="Channel"
                     className="w-12 h-12 rounded-full"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium">Mock Channel Name</h3>
+                      <h3 className="font-medium">{channelTitle}</h3>
                       <CheckCircle2 className="w-4 h-4 text-[var(--success-green)]" />
                     </div>
                     <p className="text-sm text-muted-foreground">{channelUsername}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {channelSubs.toLocaleString()} subscribers · {channelAvgViews.toLocaleString()} avg views
+                    </p>
                     <p className="text-xs text-[var(--success-green)] mt-1">Bot is admin: Verified</p>
                   </div>
                 </div>
@@ -154,7 +191,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                   </svg>
                   <span className="text-xs text-muted-foreground">Subscribers</span>
                 </div>
-                <p className="text-2xl font-semibold">125,230</p>
+                <p className="text-2xl font-semibold">{channelSubs.toLocaleString()}</p>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
@@ -165,7 +202,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                   </svg>
                   <span className="text-xs text-muted-foreground">Avg Views</span>
                 </div>
-                <p className="text-2xl font-semibold">32,450</p>
+                <p className="text-2xl font-semibold">{channelAvgViews.toLocaleString()}</p>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
@@ -175,7 +212,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                   </svg>
                   <span className="text-xs text-muted-foreground">Engagement</span>
                 </div>
-                <p className="text-2xl font-semibold">25.9%</p>
+                <p className="text-2xl font-semibold">{channelSubs > 0 ? (Math.round((channelAvgViews / channelSubs) * 1000) / 10).toFixed(1) : '0'}%</p>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
