@@ -1,15 +1,24 @@
 import { ConfigService } from '@nestjs/config';
+import { LoggerService } from '../logger/logger.service';
 import { TeeClientService } from './tee-client.service';
 
 describe('TeeClientService', () => {
   let service: TeeClientService;
   let fetchMock: jest.SpyInstance;
+  let logger: jest.Mocked<LoggerService>;
 
   beforeEach(() => {
     const config = {
       get: jest.fn((key: string) => (key === 'tee.url' ? 'http://tee:8000' : null)),
     } as unknown as ConfigService;
-    service = new TeeClientService(config);
+    logger = {
+      log: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as jest.Mocked<LoggerService>;
+    service = new TeeClientService(config, logger);
     fetchMock = jest.spyOn(globalThis, 'fetch');
   });
 

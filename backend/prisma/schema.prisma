@@ -25,6 +25,9 @@ model User {
 model Deal {
   id                 Int       @id @default(autoincrement())
   dealId             Int       @unique @map("deal_id")
+  publisherId        BigInt    @map("publisher_id")
+  advertiserId       BigInt    @map("advertiser_id")
+  channelId          BigInt?   @map("channel_id")
   verificationChatId BigInt    @map("verification_chat_id")
   status             String    @default("active")
   releasedAt         DateTime? @map("released_at")

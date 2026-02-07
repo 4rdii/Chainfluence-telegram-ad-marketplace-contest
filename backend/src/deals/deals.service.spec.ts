@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DealsService } from './deals.service';
 import { RegisterDealDto } from './dto/register-deal.dto';
@@ -10,6 +10,9 @@ describe('DealsService', () => {
   const mockDeal = {
     id: 1,
     dealId: 100,
+    publisherId: BigInt(1),
+    advertiserId: BigInt(2),
+    channelId: BigInt(-100),
     verificationChatId: BigInt(-100123),
     status: 'active',
     releasedAt: null,
@@ -32,7 +35,12 @@ describe('DealsService', () => {
   });
 
   it('register returns existing deal when dealId already exists', async () => {
-    const dto: RegisterDealDto = { dealId: 100, verificationChatId: -100123 };
+    const dto: RegisterDealDto = {
+      dealId: 100,
+      verificationChatId: -100123,
+      publisherId: 1,
+      advertiserId: 2,
+    };
     prisma.deal.findUnique.mockResolvedValue(mockDeal);
     const result = await service.register(1, dto);
     expect(result.dealId).toBe(100);
@@ -41,13 +49,22 @@ describe('DealsService', () => {
   });
 
   it('register creates new deal when dealId does not exist', async () => {
-    const dto: RegisterDealDto = { dealId: 101, verificationChatId: -100456 };
+    const dto: RegisterDealDto = {
+      dealId: 101,
+      verificationChatId: -100456,
+      publisherId: 10,
+      advertiserId: 20,
+      channelId: -200,
+    };
     prisma.deal.findUnique.mockResolvedValue(null);
     prisma.deal.create.mockResolvedValue({ ...mockDeal, dealId: 101 });
     const result = await service.register(1, dto);
     expect(prisma.deal.create).toHaveBeenCalledWith({
       data: {
         dealId: 101,
+        publisherId: BigInt(10),
+        advertiserId: BigInt(20),
+        channelId: BigInt(-200),
         verificationChatId: BigInt(-100456),
         status: 'active',
       },
@@ -55,16 +72,34 @@ describe('DealsService', () => {
     expect(result.dealId).toBe(101);
   });
 
+  it('findAll filters by userId as publisher or advertiser', async () => {
+    prisma.deal.findMany.mockResolvedValue([mockDeal]);
+    await service.findAll(1);
+    expect(prisma.deal.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [{ publisherId: BigInt(1) }, { advertiserId: BigInt(1) }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  });
+
   it('findOne throws when deal not found', async () => {
     prisma.deal.findUnique.mockResolvedValue(null);
     await expect(service.findOne(1, 999)).rejects.toThrow(NotFoundException);
   });
 
-  it('findOne returns formatted deal', async () => {
+  it('findOne throws Forbidden when user is not party to deal', async () => {
+    prisma.deal.findUnique.mockResolvedValue(mockDeal);
+    await expect(service.findOne(99, 100)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('findOne returns formatted deal when user is party', async () => {
     prisma.deal.findUnique.mockResolvedValue(mockDeal);
     const result = await service.findOne(1, 100);
     expect(result.dealId).toBe(100);
     expect(result.status).toBe('active');
+    expect(result.publisherId).toBe('1');
+    expect(result.advertiserId).toBe('2');
   });
 
   it('findActiveDeals returns only active deals', async () => {
@@ -82,7 +117,7 @@ describe('DealsService', () => {
       status: 'released',
       releasedAt: new Date(),
       txHash: 'tx123',
-    });
+    } as never);
     await service.updateDealStatus(100, 'released', 'tx123');
     expect(prisma.deal.update).toHaveBeenCalledWith({
       where: { dealId: 100 },
@@ -99,7 +134,7 @@ describe('DealsService', () => {
       ...mockDeal,
       status: 'refunded',
       refundedAt: new Date(),
-    });
+    } as never);
     await service.updateDealStatus(100, 'refunded');
     expect(prisma.deal.update).toHaveBeenCalledWith({
       where: { dealId: 100 },

@@ -21,13 +21,17 @@ export class ReviewsService {
       throw new ForbiddenException('Can only review completed deals');
     }
     const userIdBig = BigInt(userId);
+    if (deal.publisherId !== userIdBig && deal.advertiserId !== userIdBig) {
+      throw new ForbiddenException('Only deal parties can submit a review');
+    }
     const existing = await this.prisma.review.findFirst({
       where: { dealId: deal.id, reviewerId: userIdBig },
     });
     if (existing) {
       throw new ForbiddenException('Already reviewed this deal');
     }
-    const revieweeId = userIdBig; // simplified: in real app reviewee is the other party
+    const revieweeId =
+      deal.publisherId === userIdBig ? deal.advertiserId : deal.publisherId;
     const review = await this.prisma.review.create({
       data: {
         dealId: deal.id,
@@ -41,8 +45,9 @@ export class ReviewsService {
   }
 
   async findByChannel(channelId: string) {
+    const channelIdBig = BigInt(channelId);
     const reviews = await this.prisma.review.findMany({
-      where: {},
+      where: { deal: { channelId: channelIdBig } },
       take: 50,
       orderBy: { createdAt: 'desc' },
     });

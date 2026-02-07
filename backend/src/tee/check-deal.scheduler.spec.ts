@@ -1,4 +1,5 @@
 import { DealsService } from '../deals/deals.service';
+import { LoggerService } from '../logger/logger.service';
 import { TeeClientService } from './tee-client.service';
 import { CheckDealScheduler } from './check-deal.scheduler';
 
@@ -6,6 +7,7 @@ describe('CheckDealScheduler', () => {
   let scheduler: CheckDealScheduler;
   let dealsService: jest.Mocked<Pick<DealsService, 'findActiveDeals' | 'updateDealStatus'>>;
   let teeClient: jest.Mocked<Pick<TeeClientService, 'checkDeal'>>;
+  let logger: jest.Mocked<LoggerService>;
 
   beforeEach(() => {
     dealsService = {
@@ -13,9 +15,17 @@ describe('CheckDealScheduler', () => {
       updateDealStatus: jest.fn(),
     };
     teeClient = { checkDeal: jest.fn() };
+    logger = {
+      log: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as jest.Mocked<LoggerService>;
     scheduler = new CheckDealScheduler(
       dealsService as unknown as DealsService,
       teeClient as unknown as TeeClientService,
+      logger,
     );
   });
 
@@ -62,13 +72,11 @@ describe('CheckDealScheduler', () => {
       .mockRejectedValueOnce(new Error('TEE down'))
       .mockResolvedValueOnce({ action: 'released' });
 
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
     await scheduler.handleCheckDeals();
 
     expect(teeClient.checkDeal).toHaveBeenCalledTimes(2);
     expect(dealsService.updateDealStatus).toHaveBeenCalledTimes(1);
     expect(dealsService.updateDealStatus).toHaveBeenCalledWith(2, 'released', undefined);
-    consoleSpy.mockRestore();
+    expect(logger.error).toHaveBeenCalled();
   });
 });
