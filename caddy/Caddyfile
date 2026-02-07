@@ -1,0 +1,18 @@
+debazaar.click {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    @api host debazaar.click
+    handle @api {
+        reverse_proxy backend:3000 {
+            transport http {
+                read_timeout 60s
+                write_timeout 60s
+            }
+            header_down -Server
+        }
+    }
+    handle {
+        respond "🔍 No route configured for this subdomain" 404
+    }
+}

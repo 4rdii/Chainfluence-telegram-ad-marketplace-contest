@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chainfluence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chainfluence}
+      POSTGRES_DB: ${POSTGRES_DB:-chainfluence}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chainfluence} -d ${POSTGRES_DB:-chainfluence}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chainfluence}:${POSTGRES_PASSWORD:-chainfluence}@postgres:5432/${POSTGRES_DB:-chainfluence}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-placeholder}
+      TEE_URL: ${TEE_URL:-http://localhost:8000}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    build:
+      context: ./caddy
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
