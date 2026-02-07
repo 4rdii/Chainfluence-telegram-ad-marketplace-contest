@@ -54,8 +54,21 @@ export interface BackendOffer {
 export interface BackendDeal {
   id: number;
   dealId: number;
+  publisherId: string;
+  advertiserId: string;
+  channelId: string | null;
   verificationChatId: string;
   status: string;
+  escrowAddress: string | null;
+  amount: string | null;
+  duration: number | null;
+  contentHash: string | null;
+  postId: number | null;
+  postedAt: number | null;
+  publisherWallet: string | null;
+  advertiserWallet: string | null;
+  publisherSigned: boolean;
+  advertiserSigned: boolean;
   releasedAt: string | null;
   refundedAt: string | null;
   txHash: string | null;
@@ -80,6 +93,51 @@ export interface BackendReview {
   rating: number;
   comment: string | null;
   createdAt: string;
+}
+
+// ── TEE / Escrow types ──
+
+/** Per-party TonConnect signData metadata */
+export interface PartySignMeta {
+  /** Hex-encoded ed25519 signature */
+  signature: string;
+  /** Hex-encoded ed25519 public key */
+  publicKey: string;
+  /** signData envelope timestamp (unix seconds) */
+  timestamp: number;
+  /** signData envelope domain (dApp domain) */
+  domain: string;
+}
+
+/** Deal parameters matching the TEE's expected DealParams shape */
+export interface VerifyAndRegisterParams {
+  dealId: number;
+  channelId: number;
+  postId: number;
+  /** SHA-256 content hash as BigInt-compatible string (e.g. "0xabc..." or decimal) */
+  contentHash: string;
+  /** Duration in seconds */
+  duration: number;
+  /** Publisher's real TON wallet address */
+  publisher: string;
+  /** Advertiser's real TON wallet address */
+  advertiser: string;
+  /** Amount in nanoTON as string for BigInt precision */
+  amount: string;
+  /** Unix timestamp when the ad was posted */
+  postedAt: number;
+}
+
+/** Full payload for POST /escrow/verify-and-register */
+export interface VerifyAndRegisterPayload {
+  params: VerifyAndRegisterParams;
+  verificationChatId: number;
+  publisher: PartySignMeta;
+  advertiser: PartySignMeta;
+  /** Telegram user ID of the publisher (backend-only, for DB) */
+  publisherId: number;
+  /** Telegram user ID of the advertiser (backend-only, for DB) */
+  advertiserId: number;
 }
 
 // ── Token management (in-memory for Telegram Mini App security) ──
@@ -217,7 +275,19 @@ export const api = {
 
     getById: (dealId: number) => apiFetch<BackendDeal>(`/deals/${dealId}`),
 
-    register: (data: { dealId: number; verificationChatId: number }) =>
+    register: (data: {
+      dealId: number;
+      verificationChatId: number;
+      publisherId?: number;
+      advertiserId?: number;
+      channelId?: number;
+      escrowAddress?: string;
+      amount?: string;
+      duration?: number;
+      contentHash?: string;
+      publisherWallet?: string;
+      advertiserWallet?: string;
+    }) =>
       apiFetch<BackendDeal>('/deals/register', { method: 'POST', body: data }),
   },
 
@@ -246,10 +316,41 @@ export const api = {
         body: { dealId },
       }),
 
-    verifyAndRegister: (body: Record<string, unknown>) =>
+    /** Submit TonConnect signData signature for a deal party.
+     *  Auto-triggers TEE when both signatures + post info are present. */
+    signDeal: (data: {
+      dealId: number;
+      role: 'publisher' | 'advertiser';
+      signature: string;
+      publicKey: string;
+      walletAddress: string;
+      timestamp: number;
+      domain: string;
+    }) =>
+      apiFetch<{
+        deal: BackendDeal;
+        teeResult?: { success: boolean; error?: string; txHash?: string };
+      }>('/escrow/sign-deal', {
+        method: 'POST',
+        body: data,
+      }),
+
+    /** Publisher confirms the ad was posted (sets postId/postedAt).
+     *  Auto-triggers TEE if both signatures already exist. */
+    confirmPosted: (data: { dealId: number; postLink: string }) =>
+      apiFetch<{
+        deal: BackendDeal;
+        teeResult?: { success: boolean; error?: string; txHash?: string };
+      }>(
+        '/escrow/confirm-posted',
+        { method: 'POST', body: data },
+      ),
+
+    /** Direct pass-through to TEE (when all data is available client-side) */
+    verifyAndRegister: (payload: VerifyAndRegisterPayload) =>
       apiFetch<{ success: boolean; error?: string; txHash?: string }>(
         '/escrow/verify-and-register',
-        { method: 'POST', body },
+        { method: 'POST', body: payload },
       ),
   },
 };

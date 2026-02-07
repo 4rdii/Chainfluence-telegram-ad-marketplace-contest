@@ -1,5 +1,5 @@
 import { Deal, Channel, User } from '../../types';
-import { ArrowLeft, CheckCircle2, Clock, Copy, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Copy, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { StatusBadge } from '../StatusBadge';
 import { FormatBadge } from '../FormatBadge';
 import { Button } from '../ui/button';
@@ -13,15 +13,19 @@ interface DealDetailScreenProps {
   channel: Channel;
   user: User;
   onBack: () => void;
+  /** Called when the publisher confirms the ad has been posted with the message link/ID */
+  onConfirmPosted?: (deal: Deal, postLink: string) => Promise<void>;
 }
 
-export function DealDetailScreen({ deal, channel, user, onBack }: DealDetailScreenProps) {
+export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted }: DealDetailScreenProps) {
   const [creativeText, setCreativeText] = useState(deal.creativeText || '');
   const [publisherFeedback, setPublisherFeedback] = useState('');
   const [postLink, setPostLink] = useState('');
   const [showCreativeForm, setShowCreativeForm] = useState(
     deal.status === 'ACCEPTED' && deal.advertiserId === user.id && !deal.creativeText
   );
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [postSubmitError, setPostSubmitError] = useState('');
 
   const isPublisher = deal.publisherId === user.id;
   const isAdvertiser = deal.advertiserId === user.id;
@@ -63,9 +67,22 @@ export function DealDetailScreen({ deal, channel, user, onBack }: DealDetailScre
     // In real app, update deal status
   };
 
-  const handleConfirmPosted = () => {
-    console.log('Confirm posted:', postLink);
-    // In real app, submit post verification
+  const handleConfirmPosted = async () => {
+    if (!postLink || !onConfirmPosted) return;
+
+    setIsSubmittingPost(true);
+    setPostSubmitError('');
+
+    try {
+      await onConfirmPosted(deal, postLink);
+    } catch (error) {
+      console.error('Post confirmation failed:', error);
+      setPostSubmitError(
+        error instanceof Error ? error.message : 'Verification failed. Please try again.',
+      );
+    } finally {
+      setIsSubmittingPost(false);
+    }
   };
 
   return (
@@ -308,12 +325,22 @@ export function DealDetailScreen({ deal, channel, user, onBack }: DealDetailScre
                 className="mt-1"
               />
             </div>
+            {postSubmitError && (
+              <p className="text-sm text-[var(--error-red)]">{postSubmitError}</p>
+            )}
             <Button
               onClick={handleConfirmPosted}
               className="w-full bg-primary text-primary-foreground"
-              disabled={!postLink}
+              disabled={!postLink || isSubmittingPost}
             >
-              I've Posted the Ad
+              {isSubmittingPost ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Verifying post...
+                </span>
+              ) : (
+                "I've Posted the Ad"
+              )}
             </Button>
           </div>
         </div>

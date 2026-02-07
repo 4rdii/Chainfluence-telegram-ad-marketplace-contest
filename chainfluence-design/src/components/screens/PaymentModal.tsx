@@ -12,6 +12,9 @@ interface PaymentModalProps {
   amount: number;
   escrowAddress: string;
   dealLabel: string;
+  dealId: number;
+  /** Called after the TON transaction has been sent (not yet confirmed on-chain) */
+  onPaymentSent: (dealId: number) => void;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -22,6 +25,8 @@ export function PaymentModal({
   amount,
   escrowAddress,
   dealLabel,
+  dealId,
+  onPaymentSent,
   onConfirm,
   onClose,
 }: PaymentModalProps) {
@@ -59,6 +64,9 @@ export function PaymentModal({
       // Send transaction via TON Connect
       await tonConnectUI.sendTransaction(transaction);
       setState('success');
+
+      // Notify parent that payment was sent (deposit is in flight)
+      onPaymentSent(dealId);
     } catch (error) {
       console.error('Transaction error:', error);
       setState('error');

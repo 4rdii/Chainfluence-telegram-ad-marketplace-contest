@@ -139,18 +139,21 @@ const dealStatusMap: Record<string, DealStatus> = {
 };
 
 export function adaptDeal(bd: BackendDeal): Deal {
+  const amountTon = bd.amount ? Number(bd.amount) / 1_000_000_000 : 0;
+  const fee = amountTon * 0.05;
+
   return {
     id: bd.dealId.toString(),
-    advertiserId: '',
-    publisherId: '',
-    channelId: '',
+    advertiserId: bd.advertiserId ?? '',
+    publisherId: bd.publisherId ?? '',
+    channelId: bd.channelId ?? '',
     format: '1/24',
-    amount: 0,
-    platformFee: 0,
-    totalAmount: 0,
+    amount: amountTon,
+    platformFee: fee,
+    totalAmount: amountTon,
     scheduledDate: '',
     status: dealStatusMap[bd.status] || 'DEPOSITED',
-    escrowAddress: '',
+    escrowAddress: bd.escrowAddress ?? '',
     timeline: [],
     createdAt: bd.createdAt,
     completedAt: bd.releasedAt || bd.refundedAt || undefined,
