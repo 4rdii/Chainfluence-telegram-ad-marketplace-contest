@@ -30,6 +30,30 @@ model Deal {
   channelId          BigInt?   @map("channel_id")
   verificationChatId BigInt    @map("verification_chat_id")
   status             String    @default("active")
+
+  // ── Escrow & on-chain fields ──
+  escrowAddress      String?   @map("escrow_address")
+  amount             String?   // nanoTON as string
+  duration           Int?      // seconds
+  contentHash        String?   @map("content_hash")
+  postId             Int?      @map("post_id")       // Telegram message ID
+  postedAt           Int?      @map("posted_at")     // Unix timestamp
+
+  // ── Party wallet addresses (user's real connected TON wallets) ──
+  publisherWallet    String?   @map("publisher_wallet")
+  advertiserWallet   String?   @map("advertiser_wallet")
+
+  // ── Cryptographic signatures (hex-encoded ed25519 from TonConnect signData) ──
+  publisherSignature  String?  @map("publisher_signature")
+  publisherPublicKey  String?  @map("publisher_public_key")
+  publisherSignTimestamp Int?   @map("publisher_sign_timestamp")
+  publisherSignDomain   String? @map("publisher_sign_domain")
+
+  advertiserSignature String?  @map("advertiser_signature")
+  advertiserPublicKey String?  @map("advertiser_public_key")
+  advertiserSignTimestamp Int?  @map("advertiser_sign_timestamp")
+  advertiserSignDomain   String? @map("advertiser_sign_domain")
+
   releasedAt         DateTime? @map("released_at")
   refundedAt         DateTime? @map("refunded_at")
   txHash             String?   @map("tx_hash")

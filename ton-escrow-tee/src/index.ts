@@ -4,6 +4,7 @@ export { TeeService, TeeServiceConfig } from './tee-service';
 // Types
 export {
   DealParams,
+  PartySignMeta,
   VerifyAndRegisterInput,
   CheckDealResult,
   TonWallet,
@@ -13,7 +14,14 @@ export {
 
 // Utilities (for external use)
 export { computeContentHash } from './bot-api';
-export { serializeDealParams, signDealParams, verifyDealSignature } from './signature';
+export {
+  buildDealParamsCell,
+  serializeDealParams,
+  verifyTonConnectSignature,
+  crc32,
+  DEAL_PARAMS_SCHEMA,
+  DEAL_PARAMS_SCHEMA_HASH,
+} from './signature';
 export { deriveAdminWallet, deriveEscrowWallet } from './wallet';
 
 // HTTP Server
@@ -121,13 +129,26 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
       return res.status(503).json({ error: 'TEE service not fully initialized. Missing env vars.' });
     }
 
-    const { params, publisherSignature, publisherPublicKey, advertiserSignature, advertiserPublicKey, verificationChatId } = req.body;
+    const {
+      params,
+      publisher,      // { signature, publicKey, timestamp, domain }
+      advertiser,     // { signature, publicKey, timestamp, domain }
+      verificationChatId,
+    } = req.body;
 
     if (!verificationChatId || typeof verificationChatId !== 'number') {
       return res.status(400).json({ error: 'verificationChatId is required and must be a number' });
     }
 
-    // Parse addresses from strings
+    if (!publisher || !publisher.signature || !publisher.publicKey) {
+      return res.status(400).json({ error: 'publisher.signature and publisher.publicKey are required' });
+    }
+
+    if (!advertiser || !advertiser.signature || !advertiser.publicKey) {
+      return res.status(400).json({ error: 'advertiser.signature and advertiser.publicKey are required' });
+    }
+
+    // Parse deal params — publisher/advertiser are users' real wallet addresses
     const dealParams = {
       ...params,
       publisher: Address.parse(params.publisher),
@@ -138,10 +159,18 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
 
     const result = await teeService.verifyAndRegisterDeal({
       params: dealParams,
-      publisherSignature: Buffer.from(publisherSignature, 'hex'),
-      publisherPublicKey: Buffer.from(publisherPublicKey, 'hex'),
-      advertiserSignature: Buffer.from(advertiserSignature, 'hex'),
-      advertiserPublicKey: Buffer.from(advertiserPublicKey, 'hex'),
+      publisher: {
+        signature: Buffer.from(publisher.signature, 'hex'),
+        publicKey: Buffer.from(publisher.publicKey, 'hex'),
+        timestamp: publisher.timestamp,
+        domain: publisher.domain,
+      },
+      advertiser: {
+        signature: Buffer.from(advertiser.signature, 'hex'),
+        publicKey: Buffer.from(advertiser.publicKey, 'hex'),
+        timestamp: advertiser.timestamp,
+        domain: advertiser.domain,
+      },
       verificationChatId,
     });
 

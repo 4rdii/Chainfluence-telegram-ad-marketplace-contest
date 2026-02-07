@@ -7,19 +7,25 @@ export interface DealParams {
   postId: number;
   contentHash: bigint; // SHA256 hash of ad content
   duration: number; // Seconds the ad must stay up
-  publisher: Address;
-  advertiser: Address;
+  publisher: Address; // User's real connected TON wallet
+  advertiser: Address; // User's real connected TON wallet
   amount: bigint; // Amount in nanoTON
   postedAt: number; // Unix timestamp when ad was posted
+}
+
+// Per-party TonConnect signData metadata
+export interface PartySignMeta {
+  signature: Buffer; // ed25519 signature from TonConnect signData
+  publicKey: Buffer; // Public key from wallet
+  timestamp: number; // signData envelope timestamp
+  domain: string; // signData envelope domain (dApp domain)
 }
 
 // Input for verifyAndRegisterDeal
 export interface VerifyAndRegisterInput {
   params: DealParams;
-  publisherSignature: Buffer; // Publisher's ed25519 signature of params
-  publisherPublicKey: Buffer; // Publisher's public key (to verify address match)
-  advertiserSignature: Buffer; // Advertiser's ed25519 signature of params
-  advertiserPublicKey: Buffer; // Advertiser's public key (to verify address match)
+  publisher: PartySignMeta;
+  advertiser: PartySignMeta;
   verificationChatId: number; // Telegram chat ID for content verification
 }
 
