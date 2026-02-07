@@ -23,9 +23,21 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Chainfluence backend — NestJS API for the Telegram Ad Marketplace (auth, users, channels, campaigns, offers, deals, escrow proxy, reviews, notifications). Includes a scheduler that calls the TEE `checkDeal` for active deals.
 
 ## Project setup
+
+```bash
+npm install
+cp .env.example .env
+# Edit .env: DATABASE_URL, TELEGRAM_BOT_TOKEN, TEE_URL, JWT_SECRET
+npx prisma generate
+npx prisma migrate deploy
+```
+
+Required env vars: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TEE_URL`, `JWT_SECRET`. Optional: `PORT`, `NODE_ENV`.
+
+## Project setup (original)
 
 ```bash
 $ npm install

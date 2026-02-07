@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            BigInt   @id // Telegram user id
+  username      String?
+  walletAddress String?  @map("wallet_address")
+  isPublisher   Boolean  @default(false) @map("is_publisher")
+  isAdvertiser  Boolean  @default(true) @map("is_advertiser")
+  memberSince   DateTime? @map("member_since")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  channels Channel[]
+
+  @@map("users")
+}
+
+model Deal {
+  id                 Int       @id @default(autoincrement())
+  dealId             Int       @unique @map("deal_id")
+  verificationChatId BigInt    @map("verification_chat_id")
+  status             String    @default("active")
+  releasedAt         DateTime? @map("released_at")
+  refundedAt         DateTime? @map("refunded_at")
+  txHash             String?   @map("tx_hash")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  reviews Review[]
+
+  @@map("deals")
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  dealId     Int      @map("deal_id")
+  reviewerId BigInt   @map("reviewer_id")
+  revieweeId BigInt   @map("reviewee_id")
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    BigInt    @map("user_id")
+  type      String
+  title     String
+  body      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model Channel {
+  id             BigInt    @id
+  ownerId        BigInt    @map("owner_id")
+  username       String?
+  title          String?
+  category       String?
+  subscribers    Int?
+  avgViews       Int?      @map("avg_views")
+  isVerified     Boolean   @default(false) @map("is_verified")
+  isActive       Boolean   @default(true) @map("is_active")
+  statsUpdatedAt DateTime? @map("stats_updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("channels")
+}
+
+model Campaign {
+  id          Int      @id @default(autoincrement())
+  advertiserId BigInt  @map("advertiser_id")
+  title       String
+  description String?
+  category    String?
+  status      String   @default("active")
+  budget       String?  // e.g. "100" TON
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  offers Offer[]
+
+  @@map("campaigns")
+}
+
+model Offer {
+  id          Int     @id @default(autoincrement())
+  campaignId  Int     @map("campaign_id")
+  publisherId BigInt  @map("publisher_id")
+  channelId   BigInt  @map("channel_id")
+  status      String  @default("pending")
+  amount      String?
+  format      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("offers")
+}
