@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 const crypto = require('crypto');
 
-const BOT_TOKEN = process.env.BOT_TOKEN || '7743623105:AAGbdmecsMln3uhj96ds6TH-yvQMVtHxtMo';
+const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 function computeContentHash(content) {
