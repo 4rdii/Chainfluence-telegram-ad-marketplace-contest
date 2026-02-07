@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDealDto } from './dto/register-deal.dto';
 
@@ -20,10 +20,97 @@ export class DealsService {
         advertiserId: BigInt(dto.advertiserId),
         channelId: dto.channelId != null ? BigInt(dto.channelId) : null,
         verificationChatId: BigInt(dto.verificationChatId),
+        escrowAddress: dto.escrowAddress ?? null,
+        amount: dto.amount ?? null,
+        duration: dto.duration ?? null,
+        contentHash: dto.contentHash ?? null,
+        publisherWallet: dto.publisherWallet ?? null,
+        advertiserWallet: dto.advertiserWallet ?? null,
         status: 'active',
       },
     });
     return this.toResponse(deal);
+  }
+
+  /**
+   * Store a party's TonConnect signData signature and metadata.
+   * Called once per party after they sign via their TON wallet.
+   */
+  async signDeal(
+    userId: number,
+    dealId: number,
+    role: 'publisher' | 'advertiser',
+    signatureData: {
+      signature: string;
+      publicKey: string;
+      walletAddress: string;
+      timestamp: number;
+      domain: string;
+    },
+  ) {
+    const deal = await this.prisma.deal.findUnique({ where: { dealId } });
+    if (!deal) {
+      throw new NotFoundException('Deal not found');
+    }
+
+    // Ensure the caller is the correct party
+    const userIdBig = BigInt(userId);
+    if (role === 'publisher' && deal.publisherId !== userIdBig) {
+      throw new ForbiddenException('You are not the publisher of this deal');
+    }
+    if (role === 'advertiser' && deal.advertiserId !== userIdBig) {
+      throw new ForbiddenException('You are not the advertiser of this deal');
+    }
+
+    const data =
+      role === 'publisher'
+        ? {
+            publisherSignature: signatureData.signature,
+            publisherPublicKey: signatureData.publicKey,
+            publisherWallet: signatureData.walletAddress,
+            publisherSignTimestamp: signatureData.timestamp,
+            publisherSignDomain: signatureData.domain,
+          }
+        : {
+            advertiserSignature: signatureData.signature,
+            advertiserPublicKey: signatureData.publicKey,
+            advertiserWallet: signatureData.walletAddress,
+            advertiserSignTimestamp: signatureData.timestamp,
+            advertiserSignDomain: signatureData.domain,
+          };
+
+    const updated = await this.prisma.deal.update({
+      where: { dealId },
+      data,
+    });
+
+    return this.toResponse(updated);
+  }
+
+  /**
+   * Store post information when publisher confirms posting.
+   */
+  async updatePostInfo(dealId: number, postMessageId: number) {
+    const now = Math.floor(Date.now() / 1000);
+    const updated = await this.prisma.deal.update({
+      where: { dealId },
+      data: {
+        postId: postMessageId,
+        postedAt: now,
+      },
+    });
+    return this.toResponse(updated);
+  }
+
+  /**
+   * Return the raw deal record (for internal use by EscrowService).
+   */
+  async findRaw(dealId: number) {
+    const deal = await this.prisma.deal.findUnique({ where: { dealId } });
+    if (!deal) {
+      throw new NotFoundException('Deal not found');
+    }
+    return deal;
   }
 
   async findAll(userId: number) {
@@ -34,7 +121,7 @@ export class DealsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return deals.map(this.toResponse);
+    return deals.map((d) => this.toResponse(d));
   }
 
   async findOne(userId: number, dealId: number) {
@@ -77,20 +164,8 @@ export class DealsService {
     });
   }
 
-  private toResponse(deal: {
-    id: number;
-    dealId: number;
-    publisherId: bigint;
-    advertiserId: bigint;
-    channelId: bigint | null;
-    verificationChatId: bigint;
-    status: string;
-    releasedAt: Date | null;
-    refundedAt: Date | null;
-    txHash: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private toResponse(deal: any) {
     return {
       id: deal.id,
       dealId: deal.dealId,
@@ -99,6 +174,16 @@ export class DealsService {
       channelId: deal.channelId?.toString() ?? null,
       verificationChatId: deal.verificationChatId.toString(),
       status: deal.status,
+      escrowAddress: deal.escrowAddress ?? null,
+      amount: deal.amount ?? null,
+      duration: deal.duration ?? null,
+      contentHash: deal.contentHash ?? null,
+      postId: deal.postId ?? null,
+      postedAt: deal.postedAt ?? null,
+      publisherWallet: deal.publisherWallet ?? null,
+      advertiserWallet: deal.advertiserWallet ?? null,
+      publisherSigned: !!deal.publisherSignature,
+      advertiserSigned: !!deal.advertiserSignature,
       releasedAt: deal.releasedAt?.toISOString() ?? null,
       refundedAt: deal.refundedAt?.toISOString() ?? null,
       txHash: deal.txHash,

@@ -8,7 +8,7 @@ import {
   StoredDeal,
 } from './types';
 import { deriveAdminWallet, deriveEscrowWallet, getWalletBalance } from './wallet';
-import { verifyPartySignature } from './signature';
+import { verifyTonConnectSignature, DEAL_PARAMS_SCHEMA_HASH } from './signature';
 import { TelegramBotApi } from './bot-api';
 import { DealRegistry } from './deal-registry';
 import { createTonClient, withRetry, sleep } from './ton-client';
@@ -90,8 +90,8 @@ export class TeeService {
    * Verify all conditions and register the deal on-chain
    *
    * Verifications:
-   * 1. Publisher signature valid and matches address
-   * 2. Advertiser signature valid and matches address
+   * 1. Publisher TonConnect signData signature valid and matches address
+   * 2. Advertiser TonConnect signData signature valid and matches address
    * 3. Deposit exists at escrow wallet
    * 4. Deposit amount >= expected
    * 5. Post exists via Bot API
@@ -101,25 +101,31 @@ export class TeeService {
    * - Calls createDeal on Deal Registry contract
    */
   async verifyAndRegisterDeal(input: VerifyAndRegisterInput): Promise<{ success: boolean; error?: string; txHash?: string }> {
-    const { params, publisherSignature, publisherPublicKey, advertiserSignature, advertiserPublicKey, verificationChatId } = input;
+    const { params, publisher, advertiser, verificationChatId } = input;
 
-    // 1. Verify publisher signature
-    const publisherCheck = verifyPartySignature(
+    // 1. Verify publisher TonConnect signature
+    const publisherCheck = verifyTonConnectSignature(
       params,
-      publisherSignature,
-      publisherPublicKey,
-      params.publisher
+      publisher.signature,
+      publisher.publicKey,
+      params.publisher,
+      publisher.timestamp,
+      publisher.domain,
+      DEAL_PARAMS_SCHEMA_HASH,
     );
     if (!publisherCheck.valid) {
       return { success: false, error: `Publisher signature invalid: ${publisherCheck.error}` };
     }
 
-    // 2. Verify advertiser signature
-    const advertiserCheck = verifyPartySignature(
+    // 2. Verify advertiser TonConnect signature
+    const advertiserCheck = verifyTonConnectSignature(
       params,
-      advertiserSignature,
-      advertiserPublicKey,
-      params.advertiser
+      advertiser.signature,
+      advertiser.publicKey,
+      params.advertiser,
+      advertiser.timestamp,
+      advertiser.domain,
+      DEAL_PARAMS_SCHEMA_HASH,
     );
     if (!advertiserCheck.valid) {
       return { success: false, error: `Advertiser signature invalid: ${advertiserCheck.error}` };
