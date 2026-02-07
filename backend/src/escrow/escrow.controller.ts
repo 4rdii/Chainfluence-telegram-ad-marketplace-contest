@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { EscrowService } from './escrow.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
+import { VerifyAndRegisterDealDto } from './dto/verify-and-register-deal.dto';
 
 @Controller('escrow')
 @UseGuards(JwtAuthGuard)
@@ -17,8 +18,8 @@ export class EscrowController {
   @Post('verify-and-register')
   async verifyAndRegister(
     @CurrentUserId() userId: number,
-    @Body() body: { params: { dealId: number }; verificationChatId: number; [key: string]: unknown },
+    @Body() dto: VerifyAndRegisterDealDto,
   ) {
-    return this.escrowService.verifyAndRegisterDeal(userId, body);
+    return this.escrowService.verifyAndRegisterDeal(userId, dto);
   }
 }

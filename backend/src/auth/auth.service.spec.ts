@@ -1,5 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
+import { LoggerService } from '../logger/logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramValidationService } from './telegram-validation.service';
 
@@ -8,6 +9,7 @@ describe('AuthService', () => {
   let telegramValidation: jest.Mocked<TelegramValidationService>;
   let prisma: jest.Mocked<Pick<PrismaService, 'user'>>;
   let jwtService: jest.Mocked<JwtService>;
+  let logger: jest.Mocked<LoggerService>;
 
   beforeEach(() => {
     telegramValidation = {
@@ -21,10 +23,18 @@ describe('AuthService', () => {
       },
     } as unknown as jest.Mocked<Pick<PrismaService, 'user'>>;
     jwtService = { sign: jest.fn().mockReturnValue('fake-jwt') } as unknown as jest.Mocked<JwtService>;
+    logger = {
+      log: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as jest.Mocked<LoggerService>;
     service = new AuthService(
       telegramValidation,
       prisma as unknown as PrismaService,
       jwtService,
+      logger,
     );
   });
 

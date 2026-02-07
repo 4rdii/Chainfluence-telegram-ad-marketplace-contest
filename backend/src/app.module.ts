@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import configuration from './config/configuration';
 import { HealthModule } from './health/health.module';
+import { LoggerModule } from './logger/logger.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { ChannelsModule } from './channels/channels.module';
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
       load: [configuration],
     }),
     ScheduleModule.forRoot(),
+    LoggerModule,
     PrismaModule,
     AuthModule,
     UsersModule,

@@ -1,4 +1,4 @@
-import { IsInt, IsNumber } from 'class-validator';
+import { IsInt, IsNumber, IsOptional } from 'class-validator';
 
 export class RegisterDealDto {
   @IsInt()
@@ -6,4 +6,14 @@ export class RegisterDealDto {
 
   @IsNumber()
   verificationChatId: number;
+
+  @IsInt()
+  publisherId: number;
+
+  @IsInt()
+  advertiserId: number;
+
+  @IsOptional()
+  @IsNumber()
+  channelId?: number;
 }
