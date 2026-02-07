@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { BottomNav, TabType } from './components/BottomNav';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { ChannelsScreen } from './components/screens/ChannelsScreen';
@@ -31,6 +32,7 @@ import { Channel, Campaign, Deal, UserRole, User } from './types';
 import { getTelegramUser, initTelegramWebApp, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
 import { api } from './lib/api';
 import { authenticateWithTelegram } from './lib/auth';
+import { computeContentHash, signDealWithTonConnect, type DealParamsForSigning } from './lib/deal-signing';
 import { adaptUser, adaptChannel, adaptCampaign, adaptDeal, adaptOffer, adaptNotification } from './lib/adapters';
 
 // Fallback: create user from Telegram data (no backend)
@@ -64,6 +66,9 @@ type Screen =
   | { type: 'myOffers' };
 
 export default function App() {
+  const [tonConnectUI] = useTonConnectUI();
+  const tonWallet = useTonWallet();
+
   const [screen, setScreen] = useState<Screen>({ type: 'splash' });
   const [user, setUser] = useState<User>(mockUser);
   const [notifications, setNotifications] = useState(mockNotifications);
@@ -72,6 +77,7 @@ export default function App() {
   const [deals, setDeals] = useState(mockDeals);
   const [offers, setOffers] = useState(mockOffers);
   const [paymentModal, setPaymentModal] = useState<{
+    dealId: number;
     amount: number;
     escrowAddress: string;
     dealLabel: string;
@@ -319,15 +325,58 @@ export default function App() {
     handleBackToTab('profile');
   };
 
-  const handleBookAdSlot = (channel: Channel) => {
+  const handleBookAdSlot = async (channel: Channel) => {
     const cheapest = channel.pricing.find(p => p.enabled);
-    if (cheapest) {
-      const fee = cheapest.price * 0.05;
+    if (!cheapest) return;
+
+    const fee = cheapest.price * 0.05;
+    const totalAmount = cheapest.price + fee;
+
+    // Generate a deal ID (in production, the backend assigns this)
+    const dealId = Date.now() % 1_000_000;
+
+    try {
+      // Request an escrow wallet address from the TEE via the backend
+      const { address } = await api.escrow.createWallet(dealId);
+
+      // Compute content hash from the creative text
+      const contentText = ''; // Creative not yet known at booking time
+      const contentHashStr = await computeContentHash(contentText);
+
+      // Map format → duration
+      const formatDurations: Record<string, number> = {
+        '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
+      };
+      const duration = formatDurations[cheapest.format] || 86400;
+      const amountNano = Math.floor(totalAmount * 1_000_000_000).toString();
+
+      // Get the advertiser's connected wallet address
+      const advertiserWallet = tonWallet?.account?.address
+        ? tonWallet.account.address
+        : undefined;
+
+      // Register the deal in the backend with escrow data + wallet addresses
+      await api.deals.register({
+        dealId,
+        verificationChatId: parseInt(channel.id, 10),
+        publisherId: parseInt(channel.publisherId, 10),
+        advertiserId: parseInt(user.id, 10),
+        channelId: parseInt(channel.id, 10),
+        escrowAddress: address,
+        amount: amountNano,
+        duration,
+        contentHash: contentHashStr,
+        advertiserWallet,
+      });
+
       setPaymentModal({
-        amount: cheapest.price + fee,
-        escrowAddress: 'UQC0CO7RjXK4E8ngGJJnTon...',
+        dealId,
+        amount: totalAmount,
+        escrowAddress: address,
         dealLabel: `${channel.name} - ${cheapest.format}`,
       });
+    } catch (error) {
+      console.error('Failed to create escrow wallet:', error);
     }
   };
 
@@ -346,6 +395,111 @@ export default function App() {
     } catch {
       console.error('Failed to submit offer');
     }
+  };
+
+  // ── Payment & Escrow flow ──
+
+  /**
+   * Helper: build deal params for TonConnect signing from a backend deal.
+   * postId and postedAt are NOT included — they aren't part of the signed cell.
+   */
+  const buildSignableParams = (bd: {
+    dealId: number;
+    channelId: string | null;
+    contentHash: string | null;
+    duration: number | null;
+    publisherWallet: string | null;
+    advertiserWallet: string | null;
+    amount: string | null;
+  }): DealParamsForSigning => {
+    if (!bd.amount || !bd.contentHash || !bd.channelId) {
+      throw new Error('Deal is missing required fields (amount, contentHash, or channelId)');
+    }
+    if (!bd.publisherWallet || !bd.advertiserWallet) {
+      throw new Error('Deal is missing wallet addresses. Both parties must connect their wallets.');
+    }
+
+    return {
+      dealId: bd.dealId,
+      channelId: parseInt(bd.channelId, 10),
+      contentHash: bd.contentHash,
+      duration: bd.duration ?? 86400,
+      publisher: bd.publisherWallet,
+      advertiser: bd.advertiserWallet,
+      amount: bd.amount,
+    };
+  };
+
+  /**
+   * Helper: prompt user to sign deal params via TonConnect and submit to backend.
+   * Returns the backend response (which may include teeResult if TEE was triggered).
+   */
+  const signAndSubmitDeal = async (
+    dealId: number,
+    role: 'publisher' | 'advertiser',
+    dealParams: DealParamsForSigning,
+  ) => {
+    const signResult = await signDealWithTonConnect(tonConnectUI, dealParams);
+
+    return api.escrow.signDeal({
+      dealId,
+      role,
+      signature: signResult.signature,
+      publicKey: signResult.publicKey,
+      walletAddress: tonWallet?.account?.address ?? '',
+      timestamp: signResult.timestamp,
+      domain: signResult.domain,
+    });
+  };
+
+  /**
+   * Called after the advertiser's deposit TX has been submitted.
+   *
+   * Since postId/postedAt are NOT part of the signed cell, the
+   * advertiser can sign immediately after depositing.
+   */
+  const handlePaymentSent = async (dealId: number) => {
+    console.log(`Payment sent for dealId=${dealId}. Prompting advertiser to sign…`);
+
+    try {
+      const backendDeal = await api.deals.getById(dealId);
+      const dealParams = buildSignableParams(backendDeal);
+      await signAndSubmitDeal(dealId, 'advertiser', dealParams);
+      console.log(`Advertiser signature submitted for dealId=${dealId}`);
+    } catch (error) {
+      console.error('Failed to sign deal as advertiser:', error);
+    }
+
+    await loadDeals();
+  };
+
+  /**
+   * Called when the publisher confirms they have posted the ad.
+   *
+   * The publisher should have already signed the deal (at deal acceptance).
+   * This just submits the post link. The backend sets postId/postedAt and
+   * auto-triggers TEE if both signatures are present.
+   *
+   * If the publisher hasn't signed yet, we prompt them to sign here too.
+   */
+  const handleConfirmPosted = async (deal: Deal, postLink: string) => {
+    const dealId = parseInt(deal.id, 10);
+
+    // Check if publisher has already signed; if not, sign now
+    const backendDeal = await api.deals.getById(dealId);
+    if (!backendDeal.publisherSigned) {
+      const dealParams = buildSignableParams(backendDeal);
+      await signAndSubmitDeal(dealId, 'publisher', dealParams);
+    }
+
+    // Submit post link → backend sets postId/postedAt + may trigger TEE
+    const result = await api.escrow.confirmPosted({ dealId, postLink });
+
+    if (result.teeResult && !result.teeResult.success) {
+      throw new Error(result.teeResult.error || 'TEE verification failed');
+    }
+
+    await loadDeals();
   };
 
   // ── Deal completion ──
@@ -454,6 +608,7 @@ export default function App() {
             channel={channels.find(c => c.id === screen.deal.channelId)!}
             user={user}
             onBack={() => handleBackToTab('deals')}
+            onConfirmPosted={handleConfirmPosted}
           />
         )}
 
@@ -533,9 +688,11 @@ export default function App() {
       {/* Payment Modal */}
       {paymentModal && (
         <PaymentModal
+          dealId={paymentModal.dealId}
           amount={paymentModal.amount}
           escrowAddress={paymentModal.escrowAddress}
           dealLabel={paymentModal.dealLabel}
+          onPaymentSent={handlePaymentSent}
           onConfirm={() => setPaymentModal(null)}
           onClose={() => setPaymentModal(null)}
         />
