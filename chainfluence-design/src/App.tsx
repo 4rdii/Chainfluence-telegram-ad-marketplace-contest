@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BottomNav, TabType } from './components/BottomNav';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { ChannelsScreen } from './components/screens/ChannelsScreen';
@@ -28,9 +28,12 @@ import {
   mockAdvertiserStats
 } from './lib/mock-data';
 import { Channel, Campaign, Deal, UserRole, User } from './types';
-import { getTelegramUser, initTelegramWebApp, isRunningInTelegram, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
+import { getTelegramUser, initTelegramWebApp, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
+import { api } from './lib/api';
+import { authenticateWithTelegram } from './lib/auth';
+import { adaptUser, adaptChannel, adaptCampaign, adaptDeal, adaptOffer, adaptNotification } from './lib/adapters';
 
-// Create user from Telegram data
+// Fallback: create user from Telegram data (no backend)
 function createUserFromTelegram(): User | null {
   const tgUser = getTelegramUser();
   if (!tgUser) return null;
@@ -40,9 +43,9 @@ function createUserFromTelegram(): User | null {
     username: tgUser.username ? `@${tgUser.username}` : `user_${tgUser.id}`,
     displayName: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' '),
     avatar: tgUser.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(tgUser.first_name)}&background=0088CC&color=fff`,
-    roles: [], // Will be set during onboarding
+    roles: [],
     walletBalance: 0,
-    memberSince: '', // Backend will set this when user first registers
+    memberSince: '',
   };
 }
 
@@ -62,51 +65,105 @@ type Screen =
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ type: 'splash' });
-  const [user, setUser] = useState<User>(() => {
-    // Try to get Telegram user on initial load
-    const tgUser = createUserFromTelegram();
-    return tgUser || mockUser;
-  });
+  const [user, setUser] = useState<User>(mockUser);
   const [notifications, setNotifications] = useState(mockNotifications);
-  const [channels] = useState(mockChannels);
+  const [channels, setChannels] = useState(mockChannels);
   const [campaigns, setCampaigns] = useState(mockCampaigns);
-  const [deals] = useState(mockDeals);
-  const [offers] = useState(mockOffers);
+  const [deals, setDeals] = useState(mockDeals);
+  const [offers, setOffers] = useState(mockOffers);
   const [paymentModal, setPaymentModal] = useState<{
     amount: number;
     escrowAddress: string;
     dealLabel: string;
   } | null>(null);
 
-  // Initialize Telegram WebApp
-  useEffect(() => {
-    initTelegramWebApp();
+  // ── Data loaders ──
 
-    // If running in Telegram and no user yet, try to get user data
-    if (isRunningInTelegram()) {
-      const tgUser = createUserFromTelegram();
-      if (tgUser) {
-        setUser(prev => ({
-          ...tgUser,
-          roles: prev.roles, // Preserve roles if already set
-        }));
-      }
-    }
+  const loadChannels = useCallback(async () => {
+    try {
+      const data = await api.channels.list();
+      if (data.length > 0) setChannels(data.map(adaptChannel));
+    } catch { /* keep mock data */ }
   }, []);
 
-  // Manage Telegram Back Button
+  const loadCampaigns = useCallback(async () => {
+    try {
+      const data = await api.campaigns.list();
+      if (data.length > 0) setCampaigns(data.map(adaptCampaign));
+    } catch { /* keep mock data */ }
+  }, []);
+
+  const loadDeals = useCallback(async () => {
+    try {
+      const data = await api.deals.list();
+      if (data.length > 0) setDeals(data.map(adaptDeal));
+    } catch { /* keep mock data */ }
+  }, []);
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const data = await api.notifications.list();
+      if (data.length > 0) setNotifications(data.map(adaptNotification));
+    } catch { /* keep mock data */ }
+  }, []);
+
+  const loadOffers = useCallback(async () => {
+    try {
+      const data = await api.offers.getMine();
+      if (data.length > 0) setOffers(data.map(adaptOffer));
+    } catch { /* keep mock data */ }
+  }, []);
+
+  // ── Boot sequence ──
+
   useEffect(() => {
-    // Screens that should show the back button
+    async function boot() {
+      initTelegramWebApp();
+
+      // Step 1: Try to authenticate with backend
+      const token = await authenticateWithTelegram();
+
+      // Step 2: If authenticated, fetch user profile from backend
+      if (token) {
+        try {
+          const backendUser = await api.users.getMe();
+          const tgUser = getTelegramUser();
+          const adaptedUser = adaptUser(backendUser, tgUser);
+          setUser(adaptedUser);
+
+          // If user already has roles, skip onboarding
+          if (adaptedUser.roles.length > 0) {
+            setScreen({ type: 'tab', tab: 'home' });
+          }
+        } catch {
+          // Backend fetch failed — fall back to Telegram data
+          const tgUser = createUserFromTelegram();
+          if (tgUser) setUser(tgUser);
+        }
+      } else {
+        // Not in Telegram or auth failed — use Telegram data or mock
+        const tgUser = createUserFromTelegram();
+        if (tgUser) setUser(tgUser);
+      }
+
+      // Step 3: Load data (public endpoints don't need auth)
+      await Promise.all([loadChannels(), loadCampaigns()]);
+
+      // Step 4: Load authenticated data
+      if (token) {
+        await Promise.all([loadDeals(), loadNotifications(), loadOffers()]);
+      }
+    }
+
+    boot();
+  }, [loadChannels, loadCampaigns, loadDeals, loadNotifications, loadOffers]);
+
+  // ── Telegram Back Button ──
+
+  useEffect(() => {
     const screensWithBackButton = [
-      'channelDetail',
-      'campaignDetail',
-      'dealDetail',
-      'dealCompletion',
-      'addChannel',
-      'createCampaign',
-      'notifications',
-      'myCampaigns',
-      'myOffers',
+      'channelDetail', 'campaignDetail', 'dealDetail', 'dealCompletion',
+      'addChannel', 'createCampaign', 'notifications', 'myCampaigns', 'myOffers',
     ];
 
     if (screensWithBackButton.includes(screen.type)) {
@@ -117,6 +174,7 @@ export default function App() {
             setScreen({ type: 'tab', tab: 'channels' });
             break;
           case 'campaignDetail':
+          case 'createCampaign':
             setScreen({ type: 'tab', tab: 'campaigns' });
             break;
           case 'dealDetail':
@@ -128,9 +186,6 @@ export default function App() {
           case 'myOffers':
             setScreen({ type: 'tab', tab: 'profile' });
             break;
-          case 'createCampaign':
-            setScreen({ type: 'tab', tab: 'campaigns' });
-            break;
           case 'notifications':
             setScreen({ type: 'tab', tab: 'home' });
             break;
@@ -138,28 +193,23 @@ export default function App() {
             setScreen({ type: 'tab', tab: 'home' });
         }
       };
-
       showBackButton(handleBack);
     } else {
       hideBackButton();
     }
 
-    // Cleanup: hide back button when component unmounts or screen changes
-    return () => {
-      hideBackButton();
-    };
+    return () => { hideBackButton(); };
   }, [screen.type]);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
   const getUserRole = (): 'publisher' | 'advertiser' | 'both' => {
-    if (user.roles.includes('publisher') && user.roles.includes('advertiser')) {
-      return 'both';
-    }
+    if (user.roles.includes('publisher') && user.roles.includes('advertiser')) return 'both';
     return user.roles[0] as 'publisher' | 'advertiser';
   };
 
-  // Navigation handlers
+  // ── Navigation handlers ──
+
   const handleChannelClick = (channel: Channel) => {
     setScreen({ type: 'channelDetail', channel });
   };
@@ -180,47 +230,54 @@ export default function App() {
     setScreen({ type: 'tab', tab });
   };
 
-  // Splash & onboarding
+  // ── Splash & onboarding ──
+
   const handleGetStarted = () => {
     setScreen({ type: 'roleSelection' });
   };
 
-  const handleRoleSelected = (roles: UserRole[]) => {
+  const handleRoleSelected = async (roles: UserRole[]) => {
     setUser(prev => ({ ...prev, roles }));
     setScreen({ type: 'tab', tab: 'home' });
+
+    // Sync roles to backend
+    try {
+      await api.users.updateMe({
+        isPublisher: roles.includes('publisher'),
+        isAdvertiser: roles.includes('advertiser'),
+      });
+    } catch {
+      console.error('Failed to sync roles to backend');
+    }
   };
 
-  // Notifications
+  // ── Notifications ──
+
   const handleNotificationClick = () => {
     setScreen({ type: 'notifications' });
   };
 
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try { await api.notifications.markAllRead(); } catch { /* optimistic */ }
   };
 
-  const handleMarkRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
+  const handleMarkRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+    try { await api.notifications.markRead(parseInt(id)); } catch { /* optimistic */ }
   };
 
   const handleNotificationItemClick = (notification: { relatedId?: string }) => {
     if (notification.relatedId) {
       const deal = deals.find(d => d.id === notification.relatedId);
-      if (deal) {
-        handleDealClick(deal);
-        return;
-      }
+      if (deal) { handleDealClick(deal); return; }
       const campaign = campaigns.find(c => c.id === notification.relatedId);
-      if (campaign) {
-        setScreen({ type: 'campaignDetail', campaign });
-        return;
-      }
+      if (campaign) { setScreen({ type: 'campaignDetail', campaign }); return; }
     }
   };
 
-  // Campaigns
+  // ── Campaigns ──
+
   const handleCreateCampaign = () => {
     setScreen({ type: 'createCampaign' });
   };
@@ -229,30 +286,37 @@ export default function App() {
     setScreen({ type: 'myCampaigns' });
   };
 
-  const handlePauseCampaign = (campaignId: string) => {
-    setCampaigns(prev =>
-      prev.map(c => (c.id === campaignId ? { ...c, status: 'paused' as const } : c))
-    );
+  const handlePauseCampaign = async (campaignId: string) => {
+    setCampaigns(prev => prev.map(c => (c.id === campaignId ? { ...c, status: 'paused' as const } : c)));
+    try { await api.campaigns.update(parseInt(campaignId), { status: 'paused' }); } catch { /* optimistic */ }
   };
 
-  const handleResumeCampaign = (campaignId: string) => {
-    setCampaigns(prev =>
-      prev.map(c => (c.id === campaignId ? { ...c, status: 'active' as const } : c))
-    );
+  const handleResumeCampaign = async (campaignId: string) => {
+    setCampaigns(prev => prev.map(c => (c.id === campaignId ? { ...c, status: 'active' as const } : c)));
+    try { await api.campaigns.update(parseInt(campaignId), { status: 'active' }); } catch { /* optimistic */ }
   };
 
   const handleDeleteCampaign = (campaignId: string) => {
     setCampaigns(prev => prev.filter(c => c.id !== campaignId));
+    // Backend doesn't have a delete endpoint — just remove locally
   };
 
-  // Offers
+  // ── Offers ──
+
   const handleMyOffers = () => {
     setScreen({ type: 'myOffers' });
   };
 
-  // Channel
+  // ── Channels ──
+
   const handleAddChannel = () => {
     setScreen({ type: 'addChannel' });
+  };
+
+  const handleAddChannelComplete = async () => {
+    // Refresh channels from backend after adding
+    await loadChannels();
+    handleBackToTab('profile');
   };
 
   const handleBookAdSlot = (channel: Channel) => {
@@ -267,17 +331,42 @@ export default function App() {
     }
   };
 
-  const handleSubmitOffer = (channelId: string, format: string, price: number, date: string) => {
-    console.log('Submit offer:', { channelId, format, price, date });
+  const handleSubmitOffer = async (channelId: string, format: string, price: number, _date: string) => {
+    try {
+      // Find the campaign this offer is for (from current screen)
+      const campaignId = screen.type === 'campaignDetail' ? parseInt(screen.campaign.id) : 0;
+      if (campaignId) {
+        await api.campaigns.createOffer(campaignId, {
+          channelId: parseInt(channelId),
+          amount: price.toString(),
+          format,
+        });
+        await loadOffers();
+      }
+    } catch {
+      console.error('Failed to submit offer');
+    }
   };
 
-  // Deal completion
-  const handleLeaveReview = (dealId: string, rating: number) => {
-    console.log('Leave review for:', dealId, 'Rating:', rating);
-    // In real app, send to backend
+  // ── Deal completion ──
+
+  const handleLeaveReview = async (dealId: string, rating: number) => {
+    try {
+      await api.reviews.create(parseInt(dealId), { rating });
+    } catch {
+      console.error('Failed to submit review');
+    }
   };
 
-  // Derived
+  // ── Campaign creation complete ──
+
+  const handleCreateCampaignComplete = async () => {
+    await loadCampaigns();
+    handleBackToTab('campaigns');
+  };
+
+  // ── Derived ──
+
   const userChannels = channels.filter(c => c.publisherId === user.id);
   const userCampaigns = campaigns.filter(c => c.advertiserId === user.id);
   const userOffers = offers.filter(o => o.publisherId === user.id);
@@ -285,7 +374,6 @@ export default function App() {
 
   return (
     <div className="dark min-h-screen bg-background text-foreground">
-      {/* Main Content */}
       <div className="max-w-md mx-auto min-h-screen">
         {/* Onboarding */}
         {screen.type === 'splash' && (
@@ -302,6 +390,7 @@ export default function App() {
             user={user}
             deals={deals}
             notifications={notifications}
+            channels={channels}
             onNotificationClick={handleNotificationClick}
             onDealClick={handleDealClick}
           />
@@ -382,14 +471,14 @@ export default function App() {
         {screen.type === 'addChannel' && (
           <AddChannelScreen
             onBack={() => handleBackToTab('profile')}
-            onComplete={() => handleBackToTab('profile')}
+            onComplete={handleAddChannelComplete}
           />
         )}
 
         {screen.type === 'createCampaign' && (
           <CreateCampaignScreen
             onBack={() => handleBackToTab('campaigns')}
-            onComplete={() => handleBackToTab('campaigns')}
+            onComplete={handleCreateCampaignComplete}
           />
         )}
 
@@ -432,7 +521,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Bottom Navigation - Only show on tab screens */}
+      {/* Bottom Navigation */}
       {screen.type === 'tab' && (
         <BottomNav
           activeTab={activeTab}
@@ -441,7 +530,7 @@ export default function App() {
         />
       )}
 
-      {/* Payment Modal Overlay */}
+      {/* Payment Modal */}
       {paymentModal && (
         <PaymentModal
           amount={paymentModal.amount}

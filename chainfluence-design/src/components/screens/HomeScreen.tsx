@@ -8,11 +8,12 @@ interface HomeScreenProps {
   user: User;
   deals: Deal[];
   notifications: Notification[];
+  channels?: Channel[];
   onNotificationClick: () => void;
   onDealClick: (deal: Deal) => void;
 }
 
-export function HomeScreen({ user, deals, notifications, onNotificationClick, onDealClick }: HomeScreenProps) {
+export function HomeScreen({ user, deals, notifications, channels, onNotificationClick, onDealClick }: HomeScreenProps) {
   const unreadCount = notifications.filter(n => !n.read).length;
   const activeDeals = deals.filter(d => !['RELEASED', 'REFUNDED'].includes(d.status));
   const pendingActions = deals.filter(d => 
@@ -29,8 +30,9 @@ export function HomeScreen({ user, deals, notifications, onNotificationClick, on
     .filter(d => d.advertiserId === user.id)
     .reduce((sum, d) => sum + d.totalAmount, 0);
 
+  const allChannels = channels ?? mockChannels;
   const getChannelById = (channelId: string) => {
-    return mockChannels.find(c => c.id === channelId);
+    return allChannels.find(c => c.id === channelId);
   };
 
   const formatDate = (dateStr: string) => {
