@@ -156,12 +156,10 @@ export class ChannelsService {
 
     const stats = await this.gramjs.getChannelStats(channel.username);
 
-    // Persist latest stats in the DB
     await this.prisma.channel.update({
       where: { id },
       data: {
         subscribers: stats.subscriberCount,
-        avgViews: stats.avgViews,
         statsUpdatedAt: new Date(),
       },
     });
@@ -169,7 +167,7 @@ export class ChannelsService {
     return {
       channelId: channel.id.toString(),
       username: channel.username,
-      ...stats,
+      subscriberCount: stats.subscriberCount,
     };
   }
 

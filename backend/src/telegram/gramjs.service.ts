@@ -99,64 +99,40 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Fetch channel stats used by the marketplace:
-   * - subscriberCount
-   * - avgViews (average views of last 10 posts)
-   * - postsPerWeek
-   * - engagementRate (avgViews / subscriberCount)
+   * Get specific channel messages by ID. Allowed for bots (unlike messages.GetHistory).
+   * Use this when you already have message IDs (e.g. from deal verification, stored post IDs).
+   * Returns messages with views; pass messageIds from your DB or from channel post links.
    */
-  async getChannelStats(channelUsername: string) {
+  async getChannelMessagesByIds(
+    channelUsername: string,
+    messageIds: number[],
+  ): Promise<Api.Message[]> {
+    if (messageIds.length === 0) return [];
     const peer = channelUsername.startsWith('@')
       ? channelUsername
       : `@${channelUsername}`;
+    const id = messageIds.map((n) => new Api.InputMessageID({ id: n }));
+    const result = await this.getClient().invoke(
+      new Api.channels.GetMessages({ channel: peer, id }),
+    );
+    const messages =
+      'messages' in result ? (result.messages as Api.Message[]) : [];
+    return messages.filter((m) => m.className === 'Message');
+  }
 
-    // 1. Get subscriber count from fullChat
+  /**
+   * Fetch channel subscriber count (channels.GetFullChannel – bot allowed).
+   */
+  async getChannelStats(channelUsername: string): Promise<{ subscriberCount: number }> {
+    const peer = channelUsername.startsWith('@')
+      ? channelUsername
+      : `@${channelUsername}`;
     const fullChannel = await this.getClient().invoke(
       new Api.channels.GetFullChannel({ channel: peer }),
     );
     const fullChat = fullChannel.fullChat as Api.ChannelFull;
     const subscriberCount = fullChat.participantsCount ?? 0;
-
-    // 2. Get last 50 posts to calculate avg views & posts per week
-    const history = await this.getClient().invoke(
-      new Api.messages.GetHistory({
-        peer,
-        limit: 50,
-        offsetId: 0,
-        offsetDate: 0,
-        addOffset: 0,
-        maxId: 0,
-        minId: 0,
-        hash: BigInt(0) as unknown as Api.long,
-      }),
-    );
-
-    const messages =
-      'messages' in history
-        ? (history.messages as Api.Message[]).filter(
-            (m) => m.className === 'Message',
-          )
-        : [];
-
-    // Average views from last 10 posts
-    const recentPosts = messages.slice(0, 10);
-    const totalViews = recentPosts.reduce((sum, m) => sum + (m.views ?? 0), 0);
-    const avgViews =
-      recentPosts.length > 0 ? Math.round(totalViews / recentPosts.length) : 0;
-
-    // Posts per week: count posts in the last 7 days from the fetched batch
-    const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
-    const postsPerWeek = messages.filter(
-      (m) => m.date && m.date >= oneWeekAgo,
-    ).length;
-
-    // Engagement rate
-    const engagementRate =
-      subscriberCount > 0
-        ? parseFloat((avgViews / subscriberCount).toFixed(4))
-        : 0;
-
-    return { subscriberCount, avgViews, postsPerWeek, engagementRate };
+    return { subscriberCount };
   }
 
   /** Raw invoke – call any TL method directly */
