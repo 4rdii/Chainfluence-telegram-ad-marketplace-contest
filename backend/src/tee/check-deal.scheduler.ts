@@ -22,10 +22,10 @@ export class CheckDealScheduler {
 
     for (const deal of activeDeals) {
       try {
-        const result = await this.teeClient.checkDeal(
-          deal.dealId,
-          Number(deal.verificationChatId),
-        );
+        const result = await this.teeClient.checkDeal({
+          dealId: deal.dealId,
+          verificationChatId: Number(deal.verificationChatId),
+        });
 
         if (result.action === 'released') {
           await this.dealsService.updateDealStatus(
@@ -34,7 +34,7 @@ export class CheckDealScheduler {
             result.txHash,
           );
           this.logger.info(
-            `Deal ${deal.dealId} released`,
+            `Deal ${deal.dealId} released to publisher`,
             { dealId: deal.dealId, txHash: result.txHash },
             'CheckDealScheduler',
           );
@@ -45,7 +45,7 @@ export class CheckDealScheduler {
             result.txHash,
           );
           this.logger.info(
-            `Deal ${deal.dealId} refunded`,
+            `Deal ${deal.dealId} refunded to advertiser`,
             { dealId: deal.dealId, txHash: result.txHash },
             'CheckDealScheduler',
           );

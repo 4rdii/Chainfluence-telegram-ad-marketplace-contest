@@ -154,7 +154,13 @@ export function getToken(): string | null {
 
 // ── API client ──
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+import { dlog } from './debug-log';
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD ? 'https://debazaar.click/v1' : 'http://localhost:3000/v1');
+
+dlog.info('API_BASE_URL =', API_BASE_URL);
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -167,24 +173,48 @@ async function apiFetch<T>(
   path: string,
   options?: { method?: string; body?: unknown; isPublic?: boolean },
 ): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const method = options?.method || 'GET';
+  const url = `${API_BASE_URL}${path}`;
+  dlog.info(`${method} ${path}`);
 
-  if (!options?.isPublic && accessToken) {
+  if (options?.body !== undefined) {
+    const payload = typeof options.body === 'object' ? JSON.stringify(options.body) : String(options.body);
+    dlog.info(`  payload = ${payload.length > 300 ? payload.slice(0, 300) + '...' : payload}`);
+  } else if (path.includes('?')) {
+    dlog.info(`  query = ${path.split('?')[1]}`);
+  }
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const withAuth = !options?.isPublic && !!accessToken;
+  if (withAuth) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options?.method || 'GET',
-    headers,
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, err.message || 'Request failed');
+  if (method === 'GET' && !options?.body) {
+    dlog.info(`  auth = ${withAuth ? 'yes' : 'no (public)'}`);
   }
 
-  return response.json();
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err.message || `${response.status} ${response.statusText}`;
+      dlog.error(`${method} ${path} → ${response.status}: ${msg}`);
+      throw new ApiError(response.status, msg);
+    }
+
+    const data = await response.json();
+    dlog.info(`${method} ${path} → ${response.status} OK`);
+    return data as T;
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    dlog.error(`${method} ${path} → NETWORK ERROR:`, e);
+    throw e;
+  }
 }
 
 // ── Typed API methods ──
@@ -223,6 +253,12 @@ export const api = {
 
     getById: (id: string) =>
       apiFetch<BackendChannel>(`/channels/${id}`, { isPublic: true }),
+
+    /** Resolve username to channelId via Telegram API. Call before create when you only have username. */
+    resolve: (username: string) =>
+      apiFetch<{ channelId: number; title: string | null; username: string | null }>(
+        `/channels/resolve?username=${encodeURIComponent(username.replace(/^@/, ''))}`,
+      ),
 
     create: (data: { channelId?: number; username?: string }) =>
       apiFetch<BackendChannel>('/channels', { method: 'POST', body: data }),

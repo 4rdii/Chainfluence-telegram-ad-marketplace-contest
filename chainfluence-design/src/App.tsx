@@ -34,6 +34,8 @@ import { api } from './lib/api';
 import { authenticateWithTelegram } from './lib/auth';
 import { computeContentHash, signDealWithTonConnect, type DealParamsForSigning } from './lib/deal-signing';
 import { adaptUser, adaptChannel, adaptCampaign, adaptDeal, adaptOffer, adaptNotification } from './lib/adapters';
+import { DebugPanel } from './components/DebugPanel';
+import { dlog } from './lib/debug-log';
 
 // Fallback: create user from Telegram data (no backend)
 function createUserFromTelegram(): User | null {
@@ -88,77 +90,95 @@ export default function App() {
   const loadChannels = useCallback(async () => {
     try {
       const data = await api.channels.list();
+      dlog.info(`Loaded ${data.length} channels`);
       if (data.length > 0) setChannels(data.map(adaptChannel));
-    } catch { /* keep mock data */ }
+    } catch (e) { dlog.warn('loadChannels failed:', e); }
   }, []);
 
   const loadCampaigns = useCallback(async () => {
     try {
       const data = await api.campaigns.list();
+      dlog.info(`Loaded ${data.length} campaigns`);
       if (data.length > 0) setCampaigns(data.map(adaptCampaign));
-    } catch { /* keep mock data */ }
+    } catch (e) { dlog.warn('loadCampaigns failed:', e); }
   }, []);
 
   const loadDeals = useCallback(async () => {
     try {
       const data = await api.deals.list();
+      dlog.info(`Loaded ${data.length} deals`);
       if (data.length > 0) setDeals(data.map(adaptDeal));
-    } catch { /* keep mock data */ }
+    } catch (e) { dlog.warn('loadDeals failed:', e); }
   }, []);
 
   const loadNotifications = useCallback(async () => {
     try {
       const data = await api.notifications.list();
+      dlog.info(`Loaded ${data.length} notifications`);
       if (data.length > 0) setNotifications(data.map(adaptNotification));
-    } catch { /* keep mock data */ }
+    } catch (e) { dlog.warn('loadNotifications failed:', e); }
   }, []);
 
   const loadOffers = useCallback(async () => {
     try {
       const data = await api.offers.getMine();
+      dlog.info(`Loaded ${data.length} offers`);
       if (data.length > 0) setOffers(data.map(adaptOffer));
-    } catch { /* keep mock data */ }
+    } catch (e) { dlog.warn('loadOffers failed:', e); }
   }, []);
 
   // ── Boot sequence ──
 
   useEffect(() => {
     async function boot() {
+      dlog.info('Boot: starting...');
       initTelegramWebApp();
 
+      const tgUser = getTelegramUser();
+      dlog.info('Boot: TG user =', tgUser ? `${tgUser.id} @${tgUser.username}` : 'null (not in TG)');
+
       // Step 1: Try to authenticate with backend
+      dlog.info('Boot: authenticating...');
       const token = await authenticateWithTelegram();
+      dlog.info('Boot: auth result =', token ? 'GOT TOKEN' : 'NO TOKEN');
 
       // Step 2: If authenticated, fetch user profile from backend
       if (token) {
         try {
+          dlog.info('Boot: fetching user profile...');
           const backendUser = await api.users.getMe();
-          const tgUser = getTelegramUser();
+          dlog.info('Boot: user loaded, roles:', backendUser.isPublisher ? 'pub' : '', backendUser.isAdvertiser ? 'adv' : '');
           const adaptedUser = adaptUser(backendUser, tgUser);
           setUser(adaptedUser);
 
           // If user already has roles, skip onboarding
           if (adaptedUser.roles.length > 0) {
+            dlog.info('Boot: user has roles, going to home');
             setScreen({ type: 'tab', tab: 'home' });
           }
-        } catch {
+        } catch (e) {
+          dlog.error('Boot: profile fetch failed:', e);
           // Backend fetch failed — fall back to Telegram data
-          const tgUser = createUserFromTelegram();
-          if (tgUser) setUser(tgUser);
+          const fallback = createUserFromTelegram();
+          if (fallback) setUser(fallback);
         }
       } else {
         // Not in Telegram or auth failed — use Telegram data or mock
-        const tgUser = createUserFromTelegram();
-        if (tgUser) setUser(tgUser);
+        const fallback = createUserFromTelegram();
+        if (fallback) setUser(fallback);
       }
 
       // Step 3: Load data (public endpoints don't need auth)
+      dlog.info('Boot: loading public data...');
       await Promise.all([loadChannels(), loadCampaigns()]);
 
       // Step 4: Load authenticated data
       if (token) {
+        dlog.info('Boot: loading authenticated data...');
         await Promise.all([loadDeals(), loadNotifications(), loadOffers()]);
       }
+
+      dlog.info('Boot: complete');
     }
 
     boot();
@@ -317,6 +337,19 @@ export default function App() {
 
   const handleAddChannel = () => {
     setScreen({ type: 'addChannel' });
+  };
+
+  const handleAddPublisherRole = async () => {
+    try {
+      await api.users.updateMe({ isPublisher: true, isAdvertiser: user.roles.includes('advertiser') });
+      setUser(prev => ({
+        ...prev,
+        roles: [...new Set([...prev.roles, 'publisher'])],
+      }));
+      dlog.info('Added publisher role');
+    } catch (e) {
+      dlog.error('Failed to add publisher role:', e);
+    }
   };
 
   const handleAddChannelComplete = async () => {
@@ -581,6 +614,7 @@ export default function App() {
             advertiserStats={user.roles.includes('advertiser') ? mockAdvertiserStats : undefined}
             channels={channels}
             onAddChannel={handleAddChannel}
+            onAddPublisherRole={handleAddPublisherRole}
           />
         )}
 
@@ -697,6 +731,9 @@ export default function App() {
           onClose={() => setPaymentModal(null)}
         />
       )}
+
+      {/* Debug panel — tap the bug button to see logs */}
+      <DebugPanel />
     </div>
   );
 }

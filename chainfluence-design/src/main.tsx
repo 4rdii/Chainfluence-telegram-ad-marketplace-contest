@@ -1,3 +1,4 @@
+import './polyfills';
 import { createRoot } from 'react-dom/client';
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import App from './App.tsx';

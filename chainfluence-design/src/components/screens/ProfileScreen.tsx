@@ -9,9 +9,10 @@ interface ProfileScreenProps {
   advertiserStats?: AdvertiserStats;
   channels: Channel[];
   onAddChannel: () => void;
+  onAddPublisherRole?: () => void;
 }
 
-export function ProfileScreen({ user, publisherStats, advertiserStats, channels, onAddChannel }: ProfileScreenProps) {
+export function ProfileScreen({ user, publisherStats, advertiserStats, channels, onAddChannel, onAddPublisherRole }: ProfileScreenProps) {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -126,8 +127,8 @@ export function ProfileScreen({ user, publisherStats, advertiserStats, channels,
           </div>
         )}
 
-        {/* My Channels */}
-        {user.roles.includes('publisher') && (
+        {/* My Channels — only for publishers */}
+        {user.roles.includes('publisher') ? (
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold">My Channels</h2>
@@ -166,7 +167,21 @@ export function ProfileScreen({ user, publisherStats, advertiserStats, channels,
               </div>
             )}
           </div>
-        )}
+        ) : onAddPublisherRole ? (
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h2 className="font-semibold mb-2">List Your Channels</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add the Publisher role to list your Telegram channels and earn from advertisers.
+            </p>
+            <Button
+              size="sm"
+              onClick={onAddPublisherRole}
+              className="bg-[var(--ton-blue)] text-white"
+            >
+              Add Publisher Role
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
