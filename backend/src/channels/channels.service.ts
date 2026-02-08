@@ -1,6 +1,12 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramApiService } from '../telegram/telegram-api.service';
+import { GramJsService } from '../telegram/gramjs.service';
 import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 
@@ -9,18 +15,54 @@ export class ChannelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramApiService,
+    private readonly gramjs: GramJsService,
   ) {}
 
+  /** Normalize channel identifier for Telegram API: username must be @username. */
+  private normalizeChatId(channelId: number | string | undefined): number | string | undefined {
+    if (channelId === undefined) return undefined;
+    if (typeof channelId === 'number') return channelId;
+    const s = String(channelId).trim();
+    if (!s) return undefined;
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    return s.startsWith('@') ? s : `@${s}`;
+  }
+
   async create(userId: number, dto: CreateChannelDto) {
-    const chatId = dto.channelId ?? dto.username;
+    const raw = dto.channelId ?? dto.username;
+    const chatId = this.normalizeChatId(raw);
     if (chatId === undefined) {
-      throw new Error('channelId or username is required');
+      throw new BadRequestException('channelId or username is required');
     }
-    const chat = await this.telegram.getChat(chatId);
+    let chat;
+    try {
+      chat = await this.telegram.getChat(chatId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('chat not found')) {
+        throw new BadRequestException(
+          'Channel not found. Use the channel @username (e.g. @mychannel) for public channels, or the numeric ID if private. Ensure the bot is added to the channel as an admin.',
+        );
+      }
+      throw e;
+    }
     const botId = await this.telegram.getBotId();
-    const isAdmin = await this.telegram.isBotAdmin(chat.id, botId);
+    let isAdmin: boolean;
+    try {
+      isAdmin = await this.telegram.isBotAdmin(chat.id, botId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('member list is inaccessible') || msg.includes('getChatMember failed')) {
+        throw new BadRequestException(
+          'Add the bot to the channel as an administrator, then try again.',
+        );
+      }
+      throw e;
+    }
     if (!isAdmin) {
-      throw new ForbiddenException('Bot must be an administrator of the channel');
+      throw new ForbiddenException(
+        'Add the bot to the channel as an administrator, then try again.',
+      );
     }
     const id = BigInt(chat.id);
     const existing = await this.prisma.channel.findUnique({
@@ -93,6 +135,42 @@ export class ChannelsService {
       },
     });
     return this.toResponse(updated);
+  }
+
+  async getStats(id: bigint) {
+    if (!this.gramjs.isReady()) {
+      throw new BadRequestException(
+        'MTProto client is not configured. Set TELEGRAM_API_ID and TELEGRAM_API_HASH.',
+      );
+    }
+
+    const channel = await this.prisma.channel.findUnique({ where: { id } });
+    if (!channel) {
+      throw new NotFoundException('Channel not found');
+    }
+    if (!channel.username) {
+      throw new BadRequestException(
+        'Channel has no username – stats require a public channel username.',
+      );
+    }
+
+    const stats = await this.gramjs.getChannelStats(channel.username);
+
+    // Persist latest stats in the DB
+    await this.prisma.channel.update({
+      where: { id },
+      data: {
+        subscribers: stats.subscriberCount,
+        avgViews: stats.avgViews,
+        statsUpdatedAt: new Date(),
+      },
+    });
+
+    return {
+      channelId: channel.id.toString(),
+      username: channel.username,
+      ...stats,
+    };
   }
 
   private toResponse(channel: {

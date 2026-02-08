@@ -6,6 +6,8 @@ export default () => ({
   },
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
+    apiId: parseInt(process.env.TELEGRAM_API_ID ?? '0', 10),
+    apiHash: process.env.TELEGRAM_API_HASH ?? '',
   },
   tee: {
     url: process.env.TEE_URL,
