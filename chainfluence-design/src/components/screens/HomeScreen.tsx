@@ -1,6 +1,5 @@
 import { Bell, TrendingUp, Clock, Coins } from 'lucide-react';
 import { User, Deal, Notification, Channel } from '../../types';
-import { mockChannels } from '../../lib/mock-data';
 import { StatusBadge } from '../StatusBadge';
 import { WalletButton } from '../WalletButton';
 
@@ -30,7 +29,7 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
     .filter(d => d.advertiserId === user.id)
     .reduce((sum, d) => sum + d.totalAmount, 0);
 
-  const allChannels = channels ?? mockChannels;
+  const allChannels = channels ?? [];
   const getChannelById = (channelId: string) => {
     return allChannels.find(c => c.id === channelId);
   };

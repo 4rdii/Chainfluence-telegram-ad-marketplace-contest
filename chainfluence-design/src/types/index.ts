@@ -26,11 +26,11 @@ export interface FormatPricing {
 
 export interface ChannelStats {
   subscribers: number;
-  avgViews: number;
-  engagement: number;
-  postsPerWeek: number;
+  avgViews: number | null;
+  engagement: number | null;
+  postsPerWeek: number | null;
   audienceByCountry: { country: string; percentage: number }[];
-  growth: number;
+  growth: number | null;
 }
 
 export interface Channel {

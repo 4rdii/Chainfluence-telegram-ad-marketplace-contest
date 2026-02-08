@@ -46,7 +46,7 @@ export function ChannelsScreen({ channels, onChannelClick }: ChannelsScreenProps
         const bMin = Math.min(...b.pricing.filter(p => p.enabled).map(p => p.price));
         return aMin - bMin;
       case 'engagement':
-        return b.stats.engagement - a.stats.engagement;
+        return (b.stats.engagement ?? 0) - (a.stats.engagement ?? 0);
       case 'newest':
         return 0; // Would use createdAt if we had it
       default:

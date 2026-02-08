@@ -33,7 +33,7 @@ export function CampaignDetailScreen({ campaign, userChannels, onBack, onSubmitO
 
   const meetsRequirements = selectedChannelData ? {
     subscribers: selectedChannelData.stats.subscribers >= campaign.minSubscribers,
-    engagement: selectedChannelData.stats.engagement >= campaign.minEngagement,
+    engagement: (selectedChannelData.stats.engagement ?? 0) >= campaign.minEngagement,
     category: campaign.preferredCategories.includes(selectedChannelData.category)
   } : { subscribers: false, engagement: false, category: false };
 
@@ -183,7 +183,7 @@ export function CampaignDetailScreen({ campaign, userChannels, onBack, onSubmitO
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {checkRequirement(meetsRequirements.engagement)}
-                <span className="text-sm">Engagement: {selectedChannelData.stats.engagement}%</span>
+                <span className="text-sm">Engagement: {selectedChannelData.stats.engagement != null ? `${selectedChannelData.stats.engagement}%` : 'n/a'}</span>
               </div>
               <span className="text-xs text-muted-foreground">(min {campaign.minEngagement}%)</span>
             </div>

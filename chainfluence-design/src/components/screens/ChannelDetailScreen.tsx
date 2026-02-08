@@ -1,9 +1,9 @@
 import { Channel } from '../../types';
 import { CategoryChip } from '../CategoryChip';
 import { FormatBadge } from '../FormatBadge';
+import { formatStat, formatPercent } from '../../lib/format-stat';
 import { Button } from '../ui/button';
 import { ArrowLeft, ExternalLink, Users, Eye, TrendingUp, Calendar, MapPin, Star } from 'lucide-react';
-import { BarChart, Bar, XAxis, ResponsiveContainer } from 'recharts';
 
 interface ChannelDetailScreenProps {
   channel: Channel;
@@ -12,17 +12,6 @@ interface ChannelDetailScreenProps {
 }
 
 export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDetailScreenProps) {
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
-  };
-
-  const audienceData = channel.stats.audienceByCountry.map(a => ({
-    country: a.country,
-    value: a.percentage
-  }));
-
   return (
     <div className="pb-20">
       {/* Header */}
@@ -87,7 +76,7 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
               <Users className="w-4 h-4 text-[var(--ton-blue)]" />
               <span className="text-xs text-muted-foreground">Subscribers</span>
             </div>
-            <p className="text-2xl font-semibold">{formatNumber(channel.stats.subscribers)}</p>
+            <p className="text-2xl font-semibold">{formatStat(channel.stats.subscribers)}</p>
           </div>
 
           <div className="bg-card border border-border rounded-lg p-4">
@@ -95,7 +84,7 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
               <Eye className="w-4 h-4 text-[var(--ton-blue)]" />
               <span className="text-xs text-muted-foreground">Avg Views</span>
             </div>
-            <p className="text-2xl font-semibold">{formatNumber(channel.stats.avgViews)}</p>
+            <p className="text-2xl font-semibold">{formatStat(channel.stats.avgViews)}</p>
           </div>
 
           <div className="bg-card border border-border rounded-lg p-4">
@@ -103,7 +92,7 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
               <TrendingUp className="w-4 h-4 text-[var(--success-green)]" />
               <span className="text-xs text-muted-foreground">Engagement</span>
             </div>
-            <p className="text-2xl font-semibold">{channel.stats.engagement}%</p>
+            <p className="text-2xl font-semibold">{formatPercent(channel.stats.engagement)}</p>
           </div>
 
           <div className="bg-card border border-border rounded-lg p-4">
@@ -111,7 +100,7 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
               <Calendar className="w-4 h-4 text-[var(--ton-blue)]" />
               <span className="text-xs text-muted-foreground">Posts/Week</span>
             </div>
-            <p className="text-2xl font-semibold">{channel.stats.postsPerWeek}</p>
+            <p className="text-2xl font-semibold">{formatStat(channel.stats.postsPerWeek)}</p>
           </div>
         </div>
 
@@ -143,7 +132,9 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-medium mb-2">Growth Trend</h3>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-[var(--success-green)]">+{channel.stats.growth}%</span>
+            <span className="text-2xl font-semibold text-[var(--success-green)]">
+              {channel.stats.growth != null ? `+${channel.stats.growth}%` : 'n/a'}
+            </span>
             <span className="text-sm text-muted-foreground">this month</span>
           </div>
         </div>

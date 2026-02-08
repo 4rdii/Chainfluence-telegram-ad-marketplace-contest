@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { formatStat } from '../../lib/format-stat';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -61,7 +62,9 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
   const [verifyError, setVerifyError] = useState('');
   const [channelTitle, setChannelTitle] = useState('');
   const [channelSubs, setChannelSubs] = useState(0);
-  const [channelAvgViews, setChannelAvgViews] = useState(0);
+  const [channelAvgViews, setChannelAvgViews] = useState<number | null>(null);
+  const [manualAvgViews, setManualAvgViews] = useState('');
+  const [manualPostsPerWeek, setManualPostsPerWeek] = useState('');
 
   const handleVerifyChannel = async () => {
     setVerifying(true);
@@ -80,8 +83,13 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
       const adapted = adaptChannel(result);
       setChannelTitle(adapted.name);
       setChannelSubs(adapted.stats.subscribers);
-      setChannelAvgViews(adapted.stats.avgViews);
+      setChannelAvgViews(adapted.stats.avgViews ?? null);
       setVerified(true);
+      // Fetch stats via GramJS (public channels only) – subscribers only for now
+      try {
+        const stats = await api.channels.getStats(result.id);
+        setChannelSubs(stats.subscriberCount);
+      } catch { /* private channels or MTProto not configured */ }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to verify channel';
       setVerifyError(message);
@@ -238,7 +246,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                     </div>
                     <p className="text-sm text-muted-foreground">{channelType === 'public' ? channelUsername : 'Private channel'}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {channelSubs.toLocaleString()} subscribers · {channelAvgViews.toLocaleString()} avg views
+                      {channelSubs.toLocaleString()} subscribers · {formatStat(channelAvgViews)} avg views
                     </p>
                     <p className="text-xs text-[var(--success-green)] mt-1">Bot is admin: Verified</p>
                   </div>
@@ -262,11 +270,45 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
             <div>
               <h2 className="text-lg font-semibold mb-2">Channel Statistics</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Stats are auto-fetched and refreshed every 2 hours
+                Some stats may be unavailable. You can add them manually (unverified).
               </p>
             </div>
 
-            {/* Mock Stats Grid */}
+            {/* Manual inputs for unavailable stats */}
+            <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-border">
+              <p className="text-xs text-muted-foreground">Stats not available? Add manually:</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="manualAvgViews" className="text-xs">Avg Views</Label>
+                  <Input
+                    id="manualAvgViews"
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 15000"
+                    value={manualAvgViews}
+                    onChange={(e) => setManualAvgViews(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="manualPosts" className="text-xs">Posts/Week</Label>
+                  <Input
+                    id="manualPosts"
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 7"
+                    value={manualPostsPerWeek}
+                    onChange={(e) => setManualPostsPerWeek(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {(manualAvgViews || manualPostsPerWeek) && (
+                <p className="text-xs text-amber-600">Unverified – entered manually</p>
+              )}
+            </div>
+
+            {/* Stats Grid */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-card border border-border rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -285,8 +327,9 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                   <span className="text-xs text-muted-foreground">Avg Views</span>
+                  {manualAvgViews && <span className="text-[10px] text-amber-600">Unverified</span>}
                 </div>
-                <p className="text-2xl font-semibold">{channelAvgViews.toLocaleString()}</p>
+                <p className="text-2xl font-semibold">{formatStat(channelAvgViews ?? (manualAvgViews ? parseInt(manualAvgViews, 10) : null))}</p>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
@@ -296,7 +339,16 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                   </svg>
                   <span className="text-xs text-muted-foreground">Engagement</span>
                 </div>
-                <p className="text-2xl font-semibold">{channelSubs > 0 ? (Math.round((channelAvgViews / channelSubs) * 1000) / 10).toFixed(1) : '0'}%</p>
+                <p className="text-2xl font-semibold">{
+                  (() => {
+                    const av = channelAvgViews ?? (manualAvgViews ? parseInt(manualAvgViews, 10) : null);
+                    if (channelSubs > 0 && av != null) {
+                      const pct = Math.min(100, Math.round((av / channelSubs) * 1000) / 10);
+                      return `${pct.toFixed(1)}%`;
+                    }
+                    return 'n/a';
+                  })()
+                }</p>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
@@ -305,8 +357,9 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <span className="text-xs text-muted-foreground">Posts/Week</span>
+                  {manualPostsPerWeek && <span className="text-[10px] text-amber-600">Unverified</span>}
                 </div>
-                <p className="text-2xl font-semibold">14</p>
+                <p className="text-2xl font-semibold">{manualPostsPerWeek ? parseInt(manualPostsPerWeek, 10) : 'n/a'}</p>
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import { Channel } from '../types';
 import { CategoryChip } from './CategoryChip';
+import { formatStat, formatPercent } from '../lib/format-stat';
 import { Eye, Users, TrendingUp } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -9,11 +10,6 @@ interface ChannelCardProps {
 }
 
 export function ChannelCard({ channel, onViewDetails }: ChannelCardProps) {
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
-    return num.toString();
-  };
 
   const lowestPrice = Math.min(...channel.pricing.filter(p => p.enabled).map(p => p.price));
 
@@ -42,15 +38,15 @@ export function ChannelCard({ channel, onViewDetails }: ChannelCardProps) {
       <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
         <div className="flex items-center gap-1">
           <Users className="w-4 h-4" />
-          <span>{formatNumber(channel.stats.subscribers)}</span>
+          <span>{formatStat(channel.stats.subscribers)}</span>
         </div>
         <div className="flex items-center gap-1">
           <Eye className="w-4 h-4" />
-          <span>{formatNumber(channel.stats.avgViews)}</span>
+          <span>{formatStat(channel.stats.avgViews)}</span>
         </div>
         <div className="flex items-center gap-1">
           <TrendingUp className="w-4 h-4" />
-          <span>{channel.stats.engagement}%</span>
+          <span>{formatPercent(channel.stats.engagement)}</span>
         </div>
       </div>
 

@@ -160,7 +160,7 @@ export function ProfileScreen({ user, publisherStats, advertiserStats, channels,
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Subscribers</p>
-                      <p className="font-medium">{(channel.stats.subscribers / 1000).toFixed(0)}K</p>
+                      <p className="font-medium">{channel.stats.subscribers >= 1000 ? `${(channel.stats.subscribers / 1000).toFixed(0)}K` : channel.stats.subscribers}</p>
                     </div>
                   </div>
                 ))}

@@ -56,7 +56,7 @@ export function adaptUser(bu: BackendUser, tgUser: TelegramUser | null): User {
 export function adaptChannel(bc: BackendChannel): Channel {
   const name = bc.title || bc.username || `Channel ${bc.id}`;
   const subscribers = bc.subscribers ?? 0;
-  const avgViews = bc.avgViews ?? 0;
+  const avgViews = bc.avgViews ?? null;
 
   return {
     id: bc.id,
@@ -67,10 +67,11 @@ export function adaptChannel(bc: BackendChannel): Channel {
     stats: {
       subscribers,
       avgViews,
-      engagement: subscribers > 0 ? Math.round((avgViews / subscribers) * 1000) / 10 : 0,
-      postsPerWeek: 0,
+      // Engagement % = (avgViews/subscribers)*100, capped at 100% for display (values >100% from viral/reposts)
+      engagement: subscribers > 0 && avgViews != null ? Math.min(100, Math.round((avgViews / subscribers) * 1000) / 10) : null,
+      postsPerWeek: null,
       audienceByCountry: [],
-      growth: 0,
+      growth: null,
     },
     pricing: [
       { format: '1/24' as const, price: 0, enabled: false, description: 'Pinned for 24 hours' },

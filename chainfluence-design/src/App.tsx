@@ -20,13 +20,8 @@ import { DealCompletionScreen } from './components/screens/DealCompletionScreen'
 import { PaymentModal } from './components/screens/PaymentModal';
 import {
   mockUser,
-  mockChannels,
-  mockCampaigns,
-  mockDeals,
   mockNotifications,
-  mockOffers,
-  mockPublisherStats,
-  mockAdvertiserStats
+  mockOffers
 } from './lib/mock-data';
 import { Channel, Campaign, Deal, UserRole, User } from './types';
 import { getTelegramUser, initTelegramWebApp, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
@@ -74,9 +69,9 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>({ type: 'splash' });
   const [user, setUser] = useState<User>(mockUser);
   const [notifications, setNotifications] = useState(mockNotifications);
-  const [channels, setChannels] = useState(mockChannels);
-  const [campaigns, setCampaigns] = useState(mockCampaigns);
-  const [deals, setDeals] = useState(mockDeals);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
   const [offers, setOffers] = useState(mockOffers);
   const [paymentModal, setPaymentModal] = useState<{
     dealId: number;
@@ -91,7 +86,28 @@ export default function App() {
     try {
       const data = await api.channels.list();
       dlog.info(`Loaded ${data.length} channels`);
-      if (data.length > 0) setChannels(data.map(adaptChannel));
+      let channels = data.map(adaptChannel);
+      setChannels(channels);
+      if (channels.length > 0) {
+        const results = await Promise.allSettled(
+          channels.map((c) => api.channels.getStats(c.id)),
+        );
+        channels = channels.map((ch, i) => {
+          const r = results[i];
+          if (r.status === 'fulfilled' && r.value) {
+            const s = r.value;
+            return {
+              ...ch,
+              stats: {
+                ...ch.stats,
+                subscribers: s.subscriberCount,
+              },
+            };
+          }
+          return ch;
+        });
+        setChannels(channels);
+      }
     } catch (e) { dlog.warn('loadChannels failed:', e); }
   }, []);
 
@@ -99,7 +115,7 @@ export default function App() {
     try {
       const data = await api.campaigns.list();
       dlog.info(`Loaded ${data.length} campaigns`);
-      if (data.length > 0) setCampaigns(data.map(adaptCampaign));
+      setCampaigns(data.map(adaptCampaign));
     } catch (e) { dlog.warn('loadCampaigns failed:', e); }
   }, []);
 
@@ -107,7 +123,7 @@ export default function App() {
     try {
       const data = await api.deals.list();
       dlog.info(`Loaded ${data.length} deals`);
-      if (data.length > 0) setDeals(data.map(adaptDeal));
+      setDeals(data.map(adaptDeal));
     } catch (e) { dlog.warn('loadDeals failed:', e); }
   }, []);
 
@@ -610,8 +626,17 @@ export default function App() {
         {screen.type === 'tab' && screen.tab === 'profile' && (
           <ProfileScreen
             user={user}
-            publisherStats={user.roles.includes('publisher') ? mockPublisherStats : undefined}
-            advertiserStats={user.roles.includes('advertiser') ? mockAdvertiserStats : undefined}
+            publisherStats={user.roles.includes('publisher') ? {
+              channelsListed: channels.filter(c => c.publisherId === user.id).length,
+              totalEarned: deals.filter(d => d.status === 'RELEASED' && d.publisherId === user.id).reduce((s, d) => s + (d.amount - d.platformFee), 0),
+              dealsCompleted: deals.filter(d => ['RELEASED', 'REFUNDED'].includes(d.status) && d.publisherId === user.id).length,
+              rating: 0,
+            } : undefined}
+            advertiserStats={user.roles.includes('advertiser') ? {
+              totalSpent: deals.filter(d => d.status === 'RELEASED' && d.advertiserId === user.id).reduce((s, d) => s + d.totalAmount, 0),
+              dealsCompleted: deals.filter(d => ['RELEASED', 'REFUNDED'].includes(d.status) && d.advertiserId === user.id).length,
+              campaignsCreated: campaigns.filter(c => c.advertiserId === user.id).length,
+            } : undefined}
             channels={channels}
             onAddChannel={handleAddChannel}
             onAddPublisherRole={handleAddPublisherRole}
