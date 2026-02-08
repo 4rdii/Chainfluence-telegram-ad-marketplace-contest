@@ -55,33 +55,6 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
     return this.client;
   }
 
-  /** Get full channel info: subscribers, description, linked chat, etc. */
-  async getFullChannel(channel: string | Api.TypeInputChannel) {
-    return this.getClient().invoke(
-      new Api.channels.GetFullChannel({ channel }),
-    );
-  }
-
-  /** Get channel message history */
-  async getMessages(
-    peer: string | Api.TypeInputPeer,
-    limit = 10,
-    offsetId = 0,
-  ) {
-    return this.getClient().invoke(
-      new Api.messages.GetHistory({
-        peer,
-        limit,
-        offsetId,
-        offsetDate: 0,
-        addOffset: 0,
-        maxId: 0,
-        minId: 0,
-        hash: BigInt(0) as unknown as Api.long,
-      }),
-    );
-  }
-
   /** Resolve a @username to its full entity */
   async resolveUsername(username: string) {
     return this.getClient().invoke(
@@ -122,13 +95,33 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Fetch channel subscriber count (channels.GetFullChannel – bot allowed).
+   * Resolve username via contacts.ResolveUsername first so we never pass a string
+   * to GetFullChannel; passing a string can cause the client to resolve the peer
+   * in a way that triggers messages.GetHistory, which bots cannot use (BOT_METHOD_INVALID).
    */
-  async getChannelStats(channelUsername: string): Promise<{ subscriberCount: number }> {
-    const peer = channelUsername.startsWith('@')
-      ? channelUsername
-      : `@${channelUsername}`;
+  async getChannelStats(
+    channelUsername: string,
+  ): Promise<{ subscriberCount: number }> {
+    const username = channelUsername.replace(/^@/, '');
+    const resolved = await this.getClient().invoke(
+      new Api.contacts.ResolveUsername({ username }),
+    );
+    const peer = resolved.peer;
+    if (!(peer instanceof Api.PeerChannel)) {
+      throw new Error(`Resolved "${channelUsername}" is not a channel`);
+    }
+    const chat = resolved.chats.find(
+      (c) => c instanceof Api.Channel && c.id.equals(peer.channelId),
+    );
+    if (!(chat instanceof Api.Channel)) {
+      throw new Error(`Channel not found for "${channelUsername}"`);
+    }
+    const inputChannel = new Api.InputChannel({
+      channelId: chat.id,
+      accessHash: (chat.accessHash ?? BigInt(0)) as Api.long,
+    });
     const fullChannel = await this.getClient().invoke(
-      new Api.channels.GetFullChannel({ channel: peer }),
+      new Api.channels.GetFullChannel({ channel: inputChannel }),
     );
     const fullChat = fullChannel.fullChat as Api.ChannelFull;
     const subscriberCount = fullChat.participantsCount ?? 0;
