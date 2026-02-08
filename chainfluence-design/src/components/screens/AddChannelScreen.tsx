@@ -13,9 +13,36 @@ interface AddChannelScreenProps {
   onComplete: () => void;
 }
 
+type ChannelType = 'public' | 'private';
+
+/** Parse private channel input: link (t.me/c/123/2), short ID (123), or full ID (-100123). Returns channelId for API. */
+function parsePrivateChannelInput(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // t.me/c/3253146149/2 or t.me/c/3253146149
+  const linkMatch = trimmed.match(/t\.me\/c\/(\d+)(?:\/\d+)?/);
+  if (linkMatch) {
+    const num = parseInt(linkMatch[1], 10);
+    return -(1000000000000 + num); // -1003253146149 format for Telegram supergroups
+  }
+
+  // Just digits: 3253146149 or full ID: -1003253146149
+  const numOnly = trimmed.replace(/[^0-9-]/g, '');
+  if (/^-?\d+$/.test(numOnly)) {
+    const n = parseInt(numOnly, 10);
+    if (n < -1e12) return n; // Already full ID (-100...)
+    if (n >= 0) return -(1000000000000 + n); // Add -100 prefix
+    return n;
+  }
+  return null;
+}
+
 export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) {
   const [step, setStep] = useState(1);
+  const [channelType, setChannelType] = useState<ChannelType>('public');
   const [channelUsername, setChannelUsername] = useState('');
+  const [channelPrivateInput, setChannelPrivateInput] = useState('');
   const [verified, setVerified] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<ChannelCategory>('Crypto');
   const [pricing, setPricing] = useState<FormatPricing[]>([
@@ -39,9 +66,17 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
   const handleVerifyChannel = async () => {
     setVerifying(true);
     setVerifyError('');
-    const username = channelUsername.replace('@', '');
     try {
-      const result = await api.channels.create({ username });
+      const payload =
+        channelType === 'public'
+          ? { username: channelUsername.replace(/^@/, '') }
+          : (() => {
+              const channelId = parsePrivateChannelInput(channelPrivateInput);
+              if (channelId === null) throw new Error('Invalid link or ID. Use t.me/c/123 or -100123...');
+              return { channelId };
+            })();
+
+      const result = await api.channels.create(payload);
       const adapted = adaptChannel(result);
       setChannelTitle(adapted.name);
       setChannelSubs(adapted.stats.subscribers);
@@ -101,28 +136,77 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
             <div>
               <h2 className="text-lg font-semibold mb-2">Connect Your Channel</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Make sure @chainfluence_bot is added as admin to your channel
+                You must add @chainfluence_miniapp_bot as admin to your channel first
               </p>
             </div>
 
+            {/* Public vs Private toggle */}
             <div>
-              <Label htmlFor="username">Channel Username</Label>
-              <Input
-                id="username"
-                value={channelUsername}
-                onChange={(e) => setChannelUsername(e.target.value)}
-                placeholder="@channel_username"
-                className="mt-1"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Enter your Telegram channel username
-              </p>
+              <Label>Channel type</Label>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setChannelType('public'); setVerifyError(''); setVerified(false); }}
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    channelType === 'public'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  Public (@username)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setChannelType('private'); setVerifyError(''); setVerified(false); }}
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    channelType === 'private'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  Private (link)
+                </button>
+              </div>
             </div>
+
+            {channelType === 'public' ? (
+              <div>
+                <Label htmlFor="username">Channel Username</Label>
+                <Input
+                  id="username"
+                  value={channelUsername}
+                  onChange={(e) => setChannelUsername(e.target.value)}
+                  placeholder="@channel_username"
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter your public channel username
+                </p>
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="private">Private Channel Link or ID</Label>
+                <Input
+                  id="private"
+                  value={channelPrivateInput}
+                  onChange={(e) => setChannelPrivateInput(e.target.value)}
+                  placeholder="https://t.me/c/3253146149/2 or -1003253146149"
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Paste the channel link or ID. We add -100 automatically
+                </p>
+              </div>
+            )}
 
             <Button
               onClick={handleVerifyChannel}
               className="w-full"
-              disabled={!channelUsername || verified || verifying}
+              disabled={
+                verified ||
+                verifying ||
+                (channelType === 'public' ? !channelUsername.trim() : !channelPrivateInput.trim())
+              }
             >
               {verifying ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying...</>
@@ -152,7 +236,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                       <h3 className="font-medium">{channelTitle}</h3>
                       <CheckCircle2 className="w-4 h-4 text-[var(--success-green)]" />
                     </div>
-                    <p className="text-sm text-muted-foreground">{channelUsername}</p>
+                    <p className="text-sm text-muted-foreground">{channelType === 'public' ? channelUsername : 'Private channel'}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {channelSubs.toLocaleString()} subscribers · {channelAvgViews.toLocaleString()} avg views
                     </p>
