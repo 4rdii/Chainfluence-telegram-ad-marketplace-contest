@@ -2,17 +2,31 @@ debazaar.click {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
-    @api host debazaar.click
-    handle @api {
-        reverse_proxy backend:3000 {
-            transport http {
-                read_timeout 60s
-                write_timeout 60s
-            }
-            header_down -Server
-        }
+
+    # CORS preflight
+    @cors_preflight method OPTIONS
+    handle @cors_preflight {
+        header Access-Control-Allow-Origin "*"
+        header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        header Access-Control-Allow-Headers "Authorization, Content-Type, Accept"
+        header Access-Control-Max-Age "3600"
+        respond "" 204
     }
-    handle {
-        respond "🔍 No route configured for this subdomain" 404
+
+    # CORS headers on all responses
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "Authorization, Content-Type, Accept"
+
+    # Swagger UI needs trailing slash
+    @swagger path /api
+    redir @swagger /api/ 301
+
+    reverse_proxy backend:3000 {
+        transport http {
+            read_timeout 60s
+            write_timeout 60s
+        }
+        header_down -Server
     }
 }
