@@ -37,6 +37,12 @@ export class ChannelsController {
     return this.channelsService.findAll(category);
   }
 
+  @Get(':id/stats')
+  @Public()
+  getStats(@Param('id') id: string) {
+    return this.channelsService.getStats(BigInt(id));
+  }
+
   @Get(':id')
   @Public()
   findOne(@Param('id') id: string) {
