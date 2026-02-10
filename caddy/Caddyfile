@@ -1,32 +1,39 @@
-debazaar.click {
+pgadmin.debazaar.click, debazaar.click {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
-
-    # CORS preflight
-    @cors_preflight method OPTIONS
-    handle @cors_preflight {
-        header Access-Control-Allow-Origin "*"
-        header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        header Access-Control-Allow-Headers "Authorization, Content-Type, Accept"
-        header Access-Control-Max-Age "3600"
-        respond "" 204
+    
+    @pgadmin host pgadmin.debazaar.click
+    handle @pgadmin {
+        reverse_proxy pgadmin:80
     }
 
-    # CORS headers on all responses
-    header Access-Control-Allow-Origin "*"
-    header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-    header Access-Control-Allow-Headers "Authorization, Content-Type, Accept"
-
-    # Swagger UI needs trailing slash
-    @swagger path /api
-    redir @swagger /api/ 301
-
-    reverse_proxy backend:3000 {
-        transport http {
-            read_timeout 60s
-            write_timeout 60s
+    @api host debazaar.click
+    handle @api {
+        # Handle CORS preflight requests
+        @options method OPTIONS
+        handle @options {
+            header Access-Control-Allow-Origin "{http.request.header.Origin}"
+            header Access-Control-Allow-Methods "GET, POST, PATCH, PUT, DELETE, OPTIONS"
+            header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+            header Access-Control-Allow-Credentials "true"
+            header Access-Control-Max-Age "86400"
+            respond 204
         }
-        header_down -Server
+        
+        # Add CORS headers to all responses
+        reverse_proxy backend:3000 {
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+            header_up X-Real-IP {remote_host}
+            header_down Access-Control-Allow-Origin "{http.request.header.Origin}"
+            header_down Access-Control-Allow-Credentials "true"
+            header_down Access-Control-Allow-Methods "GET, POST, PATCH, PUT, DELETE, OPTIONS"
+            header_down Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        }
+    }
+
+    handle {
+        respond "No route configured for this host" 404
     }
 }

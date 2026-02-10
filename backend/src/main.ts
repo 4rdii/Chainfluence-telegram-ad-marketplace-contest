@@ -10,6 +10,25 @@ const API_PREFIX = 'v1';
 async function bootstrap() {
   validateEnv();
   const app = await NestFactory.create(AppModule);
+  
+  // Trust proxy headers from Caddy reverse proxy
+  app.set('trust proxy', true);
+  
+  // Enable CORS for Telegram Mini Apps and frontend
+  app.enableCors({
+    origin: (origin, callback) => {
+      // Allow all origins - restrict in production to specific domains
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400, // 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  });
+  
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
@@ -30,6 +49,6 @@ async function bootstrap() {
     SwaggerModule.createDocument(app, swaggerConfig),
   );
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();

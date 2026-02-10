@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -57,5 +58,11 @@ export class ChannelsController {
     @Body() dto: UpdateChannelDto,
   ) {
     return this.channelsService.update(userId, BigInt(id), dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  remove(@CurrentUserId() userId: number, @Param('id') id: string) {
+    return this.channelsService.remove(userId, BigInt(id));
   }
 }

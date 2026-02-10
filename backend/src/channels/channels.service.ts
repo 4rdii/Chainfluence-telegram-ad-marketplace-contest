@@ -137,6 +137,22 @@ export class ChannelsService {
     return this.toResponse(updated);
   }
 
+  async remove(userId: number, id: bigint) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id },
+    });
+    if (!channel) {
+      throw new NotFoundException('Channel not found');
+    }
+    if (channel.ownerId !== BigInt(userId)) {
+      throw new ForbiddenException('Not the channel owner');
+    }
+    await this.prisma.channel.delete({
+      where: { id },
+    });
+    return { message: 'Channel deleted successfully' };
+  }
+
   async getStats(id: bigint) {
     if (!this.gramjs.isReady()) {
       throw new BadRequestException(
