@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { BottomNav, TabType } from './components/BottomNav';
 import { HomeScreen } from './components/screens/HomeScreen';
@@ -49,6 +50,7 @@ function createUserFromTelegram(): User | null {
 }
 
 type Screen =
+  | { type: 'loading' }
   | { type: 'splash' }
   | { type: 'roleSelection' }
   | { type: 'tab'; tab: TabType }
@@ -66,7 +68,7 @@ export default function App() {
   const [tonConnectUI] = useTonConnectUI();
   const tonWallet = useTonWallet();
 
-  const [screen, setScreen] = useState<Screen>({ type: 'splash' });
+  const [screen, setScreen] = useState<Screen>({ type: 'loading' });
   const [user, setUser] = useState<User>(mockUser);
   const [notifications, setNotifications] = useState(mockNotifications);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -159,6 +161,7 @@ export default function App() {
       dlog.info('Boot: auth result =', token ? 'GOT TOKEN' : 'NO TOKEN');
 
       // Step 2: If authenticated, fetch user profile from backend
+      let isReturningUser = false;
       if (token) {
         try {
           dlog.info('Boot: fetching user profile...');
@@ -166,20 +169,13 @@ export default function App() {
           dlog.info('Boot: user loaded, roles:', backendUser.isPublisher ? 'pub' : '', backendUser.isAdvertiser ? 'adv' : '');
           const adaptedUser = adaptUser(backendUser, tgUser);
           setUser(adaptedUser);
-
-          // If user already has roles, skip onboarding
-          if (adaptedUser.roles.length > 0) {
-            dlog.info('Boot: user has roles, going to home');
-            setScreen({ type: 'tab', tab: 'home' });
-          }
+          isReturningUser = adaptedUser.roles.length > 0;
         } catch (e) {
           dlog.error('Boot: profile fetch failed:', e);
-          // Backend fetch failed — fall back to Telegram data
           const fallback = createUserFromTelegram();
           if (fallback) setUser(fallback);
         }
       } else {
-        // Not in Telegram or auth failed — use Telegram data or mock
         const fallback = createUserFromTelegram();
         if (fallback) setUser(fallback);
       }
@@ -192,6 +188,15 @@ export default function App() {
       if (token) {
         dlog.info('Boot: loading authenticated data...');
         await Promise.all([loadDeals(), loadNotifications(), loadOffers()]);
+      }
+
+      // Step 5: Navigate — returning users go to home, new users see splash
+      if (isReturningUser) {
+        dlog.info('Boot: returning user, going to home');
+        setScreen({ type: 'tab', tab: 'home' });
+      } else {
+        dlog.info('Boot: new user, showing splash');
+        setScreen({ type: 'splash' });
       }
 
       dlog.info('Boot: complete');
@@ -645,6 +650,14 @@ export default function App() {
   return (
     <div className="dark min-h-screen bg-background text-foreground">
       <div className="max-w-md mx-auto min-h-screen">
+        {/* Loading */}
+        {screen.type === 'loading' && (
+          <div className="flex flex-col items-center justify-center min-h-screen gap-6">
+            <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            <p className="text-muted-foreground text-sm">Loading...</p>
+          </div>
+        )}
+
         {/* Onboarding */}
         {screen.type === 'splash' && (
           <SplashScreen onGetStarted={handleGetStarted} />

@@ -1,11 +1,12 @@
-import type {
-  BackendUser,
-  BackendChannel,
-  BackendCampaign,
-  BackendOffer,
-  BackendDeal,
-  BackendNotification,
-  BackendReview,
+import {
+  api,
+  type BackendUser,
+  type BackendChannel,
+  type BackendCampaign,
+  type BackendOffer,
+  type BackendDeal,
+  type BackendNotification,
+  type BackendReview,
 } from './api';
 
 import type {
@@ -105,13 +106,15 @@ export function adaptCampaign(bc: BackendCampaign): Campaign {
     category: (bc.category as ChannelCategory) || 'Crypto',
     description: bc.description || '',
     creativeText: bc.creativeText || '',
-    creativeImages: Array.isArray(bc.creativeImages) ? bc.creativeImages : [],
+    creativeImages: Array.isArray(bc.creativeImages)
+      ? bc.creativeImages.map((id) => api.uploads.getUrl(id))
+      : [],
     budgetPerChannel: budget,
     totalBudget: budget || undefined,
-    preferredFormats: Array.isArray(bc.preferredFormats) ? bc.preferredFormats : [],
+    preferredFormats: Array.isArray(bc.preferredFormats) ? (bc.preferredFormats as AdFormat[]) : [],
     minSubscribers: bc.minSubscribers ?? 0,
     minEngagement: bc.minEngagement ?? 0,
-    preferredCategories: Array.isArray(bc.preferredCategories) ? bc.preferredCategories : [],
+    preferredCategories: Array.isArray(bc.preferredCategories) ? (bc.preferredCategories as ChannelCategory[]) : [],
     preferredRegions: [],
     deadline: bc.deadline || '',
     status: (bc.status as 'active' | 'paused' | 'completed') || 'active',

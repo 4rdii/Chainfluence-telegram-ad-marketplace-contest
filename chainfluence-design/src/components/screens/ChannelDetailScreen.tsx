@@ -3,7 +3,7 @@ import { CategoryChip } from '../CategoryChip';
 import { FormatBadge } from '../FormatBadge';
 import { formatStat, formatPercent } from '../../lib/format-stat';
 import { Button } from '../ui/button';
-import { ArrowLeft, ExternalLink, Users, Eye, TrendingUp, Calendar, MapPin, Star } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Users, Eye, Calendar, MapPin, Star, TrendingUp } from 'lucide-react';
 
 interface ChannelDetailScreenProps {
   channel: Channel;
@@ -13,7 +13,7 @@ interface ChannelDetailScreenProps {
 
 export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDetailScreenProps) {
   return (
-    <div className="pb-20">
+    <div className="pb-4">
       {/* Header */}
       <div className="bg-card border-b border-border p-4">
         <button
@@ -128,16 +128,6 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
           </div>
         </div>
 
-        {/* Growth Trend */}
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-medium mb-2">Growth Trend</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-[var(--success-green)]">
-              {channel.stats.growth != null ? `+${channel.stats.growth}%` : 'n/a'}
-            </span>
-            <span className="text-sm text-muted-foreground">this month</span>
-          </div>
-        </div>
       </div>
 
       {/* Pricing Table */}
@@ -232,16 +222,6 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
         </div>
       </div>
 
-      {/* Sticky CTA */}
-      <div className="fixed bottom-16 left-0 right-0 p-4 bg-background border-t border-border max-w-md mx-auto">
-        <Button
-          onClick={() => onBookAdSlot(channel)}
-          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-          size="lg"
-        >
-          Book Ad Slot
-        </Button>
-      </div>
     </div>
   );
 }
