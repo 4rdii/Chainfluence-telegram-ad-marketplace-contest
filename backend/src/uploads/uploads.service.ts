@@ -25,7 +25,7 @@ export class UploadsService {
   ): Promise<{ fileId: string }> {
     const formData = new FormData();
     formData.append('chat_id', userId.toString());
-    formData.append('photo', new Blob([buffer]), filename);
+    formData.append('photo', new Blob([new Uint8Array(buffer)]), filename);
     // Send silently so user doesn't get spammed
     formData.append('disable_notification', 'true');
 
