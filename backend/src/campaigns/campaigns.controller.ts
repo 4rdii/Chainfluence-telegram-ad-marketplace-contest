@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUserId } from '../auth/current-user.decorator';
+import { Public } from '../auth/public.decorator';
 import { CampaignsService } from './campaigns.service';
 import { OffersService } from '../offers/offers.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
@@ -31,6 +32,7 @@ export class CampaignsController {
   }
 
   @Get()
+  @Public()
   findAll(
     @Query('category') category?: string,
     @Query('status') status?: string,
