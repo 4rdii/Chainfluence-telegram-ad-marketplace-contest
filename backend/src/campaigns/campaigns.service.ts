@@ -15,6 +15,14 @@ export class CampaignsService {
         description: dto.description ?? null,
         category: dto.category ?? null,
         budget: dto.budget ?? null,
+        creativeText: dto.creativeText ?? null,
+        contentGuidelines: dto.contentGuidelines ?? null,
+        creativeImages: dto.creativeImages ?? [],
+        preferredFormats: dto.preferredFormats ?? [],
+        minSubscribers: dto.minSubscribers ?? null,
+        minEngagement: dto.minEngagement ?? null,
+        preferredCategories: dto.preferredCategories ?? [],
+        deadline: dto.deadline ?? null,
       },
     });
     return this.toResponse(campaign);
@@ -62,6 +70,14 @@ export class CampaignsService {
         ...(dto.category !== undefined && { category: dto.category }),
         ...(dto.status !== undefined && { status: dto.status }),
         ...(dto.budget !== undefined && { budget: dto.budget }),
+        ...(dto.creativeText !== undefined && { creativeText: dto.creativeText }),
+        ...(dto.contentGuidelines !== undefined && { contentGuidelines: dto.contentGuidelines }),
+        ...(dto.creativeImages !== undefined && { creativeImages: dto.creativeImages }),
+        ...(dto.preferredFormats !== undefined && { preferredFormats: dto.preferredFormats }),
+        ...(dto.minSubscribers !== undefined && { minSubscribers: dto.minSubscribers }),
+        ...(dto.minEngagement !== undefined && { minEngagement: dto.minEngagement }),
+        ...(dto.preferredCategories !== undefined && { preferredCategories: dto.preferredCategories }),
+        ...(dto.deadline !== undefined && { deadline: dto.deadline }),
       },
     });
     return this.toResponse(updated);
@@ -75,6 +91,14 @@ export class CampaignsService {
     category: string | null;
     status: string;
     budget: string | null;
+    creativeText: string | null;
+    contentGuidelines: string | null;
+    creativeImages: unknown;
+    preferredFormats: unknown;
+    minSubscribers: number | null;
+    minEngagement: number | null;
+    preferredCategories: unknown;
+    deadline: string | null;
     createdAt: Date;
     updatedAt: Date;
     offers?: { id: number }[];
@@ -87,6 +111,14 @@ export class CampaignsService {
       category: campaign.category,
       status: campaign.status,
       budget: campaign.budget,
+      creativeText: campaign.creativeText,
+      contentGuidelines: campaign.contentGuidelines,
+      creativeImages: campaign.creativeImages,
+      preferredFormats: campaign.preferredFormats,
+      minSubscribers: campaign.minSubscribers,
+      minEngagement: campaign.minEngagement,
+      preferredCategories: campaign.preferredCategories,
+      deadline: campaign.deadline,
       createdAt: campaign.createdAt.toISOString(),
       updatedAt: campaign.updatedAt.toISOString(),
       ...(campaign.offers && { offerCount: campaign.offers.length }),

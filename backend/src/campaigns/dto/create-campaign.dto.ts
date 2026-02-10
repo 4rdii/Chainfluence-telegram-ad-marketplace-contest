@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateCampaignDto {
   @IsString()
@@ -15,4 +15,36 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsString()
   budget?: string;
+
+  @IsOptional()
+  @IsString()
+  creativeText?: string;
+
+  @IsOptional()
+  @IsString()
+  contentGuidelines?: string;
+
+  @IsOptional()
+  @IsArray()
+  creativeImages?: string[];
+
+  @IsOptional()
+  @IsArray()
+  preferredFormats?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  minSubscribers?: number;
+
+  @IsOptional()
+  @IsNumber()
+  minEngagement?: number;
+
+  @IsOptional()
+  @IsArray()
+  preferredCategories?: string[];
+
+  @IsOptional()
+  @IsString()
+  deadline?: string;
 }

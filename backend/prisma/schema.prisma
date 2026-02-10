@@ -113,15 +113,23 @@ model Channel {
 }
 
 model Campaign {
-  id          Int      @id @default(autoincrement())
-  advertiserId BigInt  @map("advertiser_id")
-  title       String
-  description String?
-  category    String?
-  status      String   @default("active")
-  budget       String?  // e.g. "100" TON
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                  Int      @id @default(autoincrement())
+  advertiserId        BigInt   @map("advertiser_id")
+  title               String
+  description         String?
+  category            String?
+  status              String   @default("active")
+  budget              String?  // e.g. "100" TON
+  creativeText        String?  @map("creative_text")
+  contentGuidelines   String?  @map("content_guidelines")
+  creativeImages      Json?    @default("[]") @map("creative_images")
+  preferredFormats    Json?    @default("[]") @map("preferred_formats")
+  minSubscribers      Int?     @map("min_subscribers")
+  minEngagement       Float?   @map("min_engagement")
+  preferredCategories Json?    @default("[]") @map("preferred_categories")
+  deadline            String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   offers Offer[]
 

@@ -18,6 +18,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { OffersModule } from './offers/offers.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { TeeModule } from './tee/tee.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -39,6 +40,7 @@ import { UsersModule } from './users/users.module';
     TeeModule,
     ReviewsModule,
     NotificationsModule,
+    UploadsModule,
     HealthModule,
   ],
   controllers: [AppController],
