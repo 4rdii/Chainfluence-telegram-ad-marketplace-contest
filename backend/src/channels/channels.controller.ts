@@ -44,10 +44,10 @@ export class ChannelsController {
     return this.channelsService.getStats(BigInt(id));
   }
 
-  @Get(':id')
-  @Public()
-  findOne(@Param('id') id: string) {
-    return this.channelsService.findOne(BigInt(id));
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  remove(@CurrentUserId() userId: number, @Param('id') id: string) {
+    return this.channelsService.remove(userId, BigInt(id));
   }
 
   @Patch(':id')
@@ -60,9 +60,9 @@ export class ChannelsController {
     return this.channelsService.update(userId, BigInt(id), dto);
   }
 
-  @Delete(':id')
-  @UseGuards(JwtAuthGuard)
-  remove(@CurrentUserId() userId: number, @Param('id') id: string) {
-    return this.channelsService.remove(userId, BigInt(id));
+  @Get(':id')
+  @Public()
+  findOne(@Param('id') id: string) {
+    return this.channelsService.findOne(BigInt(id));
   }
 }

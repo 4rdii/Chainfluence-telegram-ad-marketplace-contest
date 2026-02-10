@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { validateEnv } from './config/env.validation';
 
@@ -9,8 +10,8 @@ const API_PREFIX = 'v1';
 
 async function bootstrap() {
   validateEnv();
-  const app = await NestFactory.create(AppModule);
-  
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
   // Trust proxy headers from Caddy reverse proxy
   app.set('trust proxy', true);
   
