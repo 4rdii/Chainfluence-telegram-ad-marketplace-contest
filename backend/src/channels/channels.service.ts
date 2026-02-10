@@ -132,6 +132,9 @@ export class ChannelsService {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.category !== undefined && { category: dto.category }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        ...(dto.avgViews !== undefined && { avgViews: dto.avgViews }),
+        ...(dto.postsPerWeek !== undefined && { postsPerWeek: dto.postsPerWeek }),
+        ...(dto.pricing !== undefined && { pricing: dto.pricing }),
       },
     });
     return this.toResponse(updated);
@@ -195,6 +198,8 @@ export class ChannelsService {
     category: string | null;
     subscribers: number | null;
     avgViews: number | null;
+    postsPerWeek: number | null;
+    pricing: any;
     isVerified: boolean;
     isActive: boolean;
     statsUpdatedAt: Date | null;
@@ -209,6 +214,8 @@ export class ChannelsService {
       category: channel.category,
       subscribers: channel.subscribers,
       avgViews: channel.avgViews,
+      postsPerWeek: channel.postsPerWeek,
+      pricing: channel.pricing,
       isVerified: channel.isVerified,
       isActive: channel.isActive,
       statsUpdatedAt: channel.statsUpdatedAt?.toISOString() ?? null,

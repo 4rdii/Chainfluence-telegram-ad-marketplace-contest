@@ -13,6 +13,7 @@ import type {
   UserRole,
   Channel,
   ChannelCategory,
+  FormatPricing,
   Campaign,
   Offer,
   OfferStatus,
@@ -53,10 +54,22 @@ export function adaptUser(bu: BackendUser, tgUser: TelegramUser | null): User {
 
 // ── Channel adapter ──
 
+const DEFAULT_PRICING: FormatPricing[] = [
+  { format: '1/24', price: 0, enabled: false, description: 'Pinned for 24 hours' },
+  { format: '2/48', price: 0, enabled: false, description: 'Stay for 48 hours' },
+  { format: '3/72', price: 0, enabled: false, description: 'Stay for 72 hours' },
+  { format: 'eternal', price: 0, enabled: false, description: 'Permanent post' },
+];
+
 export function adaptChannel(bc: BackendChannel): Channel {
   const name = bc.title || bc.username || `Channel ${bc.id}`;
   const subscribers = bc.subscribers ?? 0;
   const avgViews = bc.avgViews ?? null;
+
+  const pricing: FormatPricing[] =
+    Array.isArray(bc.pricing) && bc.pricing.length > 0
+      ? (bc.pricing as FormatPricing[])
+      : DEFAULT_PRICING;
 
   return {
     id: bc.id,
@@ -67,18 +80,12 @@ export function adaptChannel(bc: BackendChannel): Channel {
     stats: {
       subscribers,
       avgViews,
-      // Engagement % = (avgViews/subscribers)*100, capped at 100% for display (values >100% from viral/reposts)
       engagement: subscribers > 0 && avgViews != null ? Math.min(100, Math.round((avgViews / subscribers) * 1000) / 10) : null,
-      postsPerWeek: null,
+      postsPerWeek: bc.postsPerWeek ?? null,
       audienceByCountry: [],
       growth: null,
     },
-    pricing: [
-      { format: '1/24' as const, price: 0, enabled: false, description: 'Pinned for 24 hours' },
-      { format: '2/48' as const, price: 0, enabled: false, description: 'Stay for 48 hours' },
-      { format: '3/72' as const, price: 0, enabled: false, description: 'Stay for 72 hours' },
-      { format: 'eternal' as const, price: 0, enabled: false, description: 'Permanent post' },
-    ],
+    pricing,
     rating: 0,
     reviewCount: 0,
     publisherId: bc.ownerId,

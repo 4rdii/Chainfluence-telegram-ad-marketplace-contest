@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class UpdateChannelDto {
   @IsOptional()
@@ -12,4 +12,16 @@ export class UpdateChannelDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  avgViews?: number;
+
+  @IsOptional()
+  @IsNumber()
+  postsPerWeek?: number;
+
+  @IsOptional()
+  @IsArray()
+  pricing?: any[];
 }

@@ -60,11 +60,13 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
 
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
+  const [channelId, setChannelId] = useState<string | null>(null);
   const [channelTitle, setChannelTitle] = useState('');
   const [channelSubs, setChannelSubs] = useState(0);
   const [channelAvgViews, setChannelAvgViews] = useState<number | null>(null);
   const [manualAvgViews, setManualAvgViews] = useState('');
   const [manualPostsPerWeek, setManualPostsPerWeek] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleVerifyChannel = async () => {
     setVerifying(true);
@@ -80,6 +82,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
             })();
 
       const result = await api.channels.create(payload);
+      setChannelId(result.id);
       const adapted = adaptChannel(result);
       setChannelTitle(adapted.name);
       setChannelSubs(adapted.stats.subscribers);
@@ -104,9 +107,26 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
     ));
   };
 
-  const handleComplete = () => {
-    console.log('Channel listing:', { channelUsername, selectedCategory, pricing });
-    onComplete();
+  const handleComplete = async () => {
+    if (!channelId) return;
+    setSaving(true);
+    try {
+      const finalAvgViews = channelAvgViews ?? (manualAvgViews ? parseInt(manualAvgViews, 10) : undefined);
+      const finalPostsPerWeek = manualPostsPerWeek ? parseInt(manualPostsPerWeek, 10) : undefined;
+
+      await api.channels.update(channelId, {
+        category: selectedCategory,
+        ...(finalAvgViews !== undefined && { avgViews: finalAvgViews }),
+        ...(finalPostsPerWeek !== undefined && { postsPerWeek: finalPostsPerWeek }),
+        pricing,
+      });
+      onComplete();
+    } catch (err) {
+      console.error('Failed to save channel details:', err);
+      onComplete();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const renderProgressBar = () => (
@@ -451,17 +471,6 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
               ))}
             </div>
 
-            {/* Summary */}
-            <div className="bg-accent/50 border border-border rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Listing fee</span>
-                <span className="text-xl font-semibold">2 TON</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                One-time payment to list your channel on the marketplace
-              </p>
-            </div>
-
             <div className="flex gap-3">
               <Button
                 onClick={() => setStep(2)}
@@ -473,9 +482,13 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
               <Button
                 onClick={handleComplete}
                 className="flex-1 bg-primary text-primary-foreground"
-                disabled={!pricing.some(p => p.enabled && p.price > 0)}
+                disabled={saving || !pricing.some(p => p.enabled && p.price > 0)}
               >
-                List Channel - Pay 2 TON
+                {saving ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                ) : (
+                  'List Channel'
+                )}
               </Button>
             </div>
           </div>

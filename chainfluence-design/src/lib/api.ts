@@ -19,6 +19,8 @@ export interface BackendChannel {
   category: string | null;
   subscribers: number | null;
   avgViews: number | null;
+  postsPerWeek: number | null;
+  pricing: any[] | null;
   isVerified: boolean;
   isActive: boolean;
   statsUpdatedAt: string | null;
@@ -354,7 +356,7 @@ export const api = {
     create: (data: { channelId?: number; username?: string }) =>
       apiFetch<BackendChannel>('/channels', { method: 'POST', body: data }),
 
-    update: (id: string, data: { title?: string; category?: string; isActive?: boolean }) =>
+    update: (id: string, data: { title?: string; category?: string; isActive?: boolean; avgViews?: number; postsPerWeek?: number; pricing?: any[] }) =>
       apiFetch<BackendChannel>(`/channels/${id}`, { method: 'PATCH', body: data }),
 
     delete: (id: string) =>
