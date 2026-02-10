@@ -374,6 +374,73 @@ export default function App() {
     handleBackToTab('profile');
   };
 
+  const handleDeleteChannel = async (channelId: string) => {
+    dlog.info('handleDeleteChannel called', { channelId });
+    
+    // Use Telegram's showConfirm if available, otherwise fallback to browser confirm
+    const webApp = typeof window !== 'undefined' && window.Telegram?.WebApp;
+    
+    if (webApp?.showConfirm) {
+      // Use Telegram's native confirmation dialog
+      webApp.showConfirm('Are you sure you want to delete this channel?', (confirmed: boolean) => {
+        dlog.info('Telegram confirm dialog result:', confirmed);
+        if (confirmed) {
+          performDelete(channelId);
+        }
+      });
+    } else {
+      // Fallback to browser confirm (for testing outside Telegram)
+      const confirmed = window.confirm('Are you sure you want to delete this channel?');
+      dlog.info('Browser confirm dialog result:', confirmed);
+      if (confirmed) {
+        performDelete(channelId);
+      }
+    }
+  };
+
+  const performDelete = async (channelId: string) => {
+    dlog.info(`Deleting channel: ${channelId}`);
+    
+    try {
+      const result = await api.channels.delete(channelId);
+      dlog.info('Delete API response:', result);
+      
+      // Remove channel from state
+      setChannels(prev => {
+        const filtered = prev.filter(c => c.id !== channelId);
+        dlog.info(`Channel deleted. Remaining channels: ${filtered.length}`);
+        return filtered;
+      });
+      
+      dlog.info('Channel deleted successfully');
+      
+      // Show success feedback
+      const webApp = typeof window !== 'undefined' && window.Telegram?.WebApp;
+      if (webApp?.showAlert) {
+        webApp.showAlert('Channel deleted successfully');
+      }
+    } catch (e) {
+      dlog.error('Failed to delete channel:', e);
+      
+      let errorMessage = 'Unknown error';
+      if (e instanceof Error) {
+        errorMessage = e.message;
+      } else if (typeof e === 'string') {
+        errorMessage = e;
+      } else {
+        errorMessage = JSON.stringify(e);
+      }
+      
+      // Show error feedback
+      const webApp = typeof window !== 'undefined' && window.Telegram?.WebApp;
+      if (webApp?.showAlert) {
+        webApp.showAlert(`Failed to delete channel: ${errorMessage}`);
+      } else {
+        alert(`Failed to delete channel:\n${errorMessage}`);
+      }
+    }
+  };
+
   const handleBookAdSlot = async (channel: Channel) => {
     const cheapest = channel.pricing.find(p => p.enabled);
     if (!cheapest) return;
@@ -640,6 +707,7 @@ export default function App() {
             channels={channels}
             onAddChannel={handleAddChannel}
             onAddPublisherRole={handleAddPublisherRole}
+            onDeleteChannel={handleDeleteChannel}
           />
         )}
 

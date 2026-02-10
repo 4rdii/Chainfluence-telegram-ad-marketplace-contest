@@ -1,5 +1,5 @@
 import { User, PublisherStats, AdvertiserStats, Channel } from '../../types';
-import { TrendingUp, DollarSign, Star, Award } from 'lucide-react';
+import { TrendingUp, DollarSign, Star, Award, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { WalletButton } from '../WalletButton';
 
@@ -10,9 +10,10 @@ interface ProfileScreenProps {
   channels: Channel[];
   onAddChannel: () => void;
   onAddPublisherRole?: () => void;
+  onDeleteChannel?: (channelId: string) => void;
 }
 
-export function ProfileScreen({ user, publisherStats, advertiserStats, channels, onAddChannel, onAddPublisherRole }: ProfileScreenProps) {
+export function ProfileScreen({ user, publisherStats, advertiserStats, channels, onAddChannel, onAddPublisherRole, onDeleteChannel }: ProfileScreenProps) {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -162,6 +163,20 @@ export function ProfileScreen({ user, publisherStats, advertiserStats, channels,
                       <p className="text-xs text-muted-foreground">Subscribers</p>
                       <p className="font-medium">{channel.stats.subscribers >= 1000 ? `${(channel.stats.subscribers / 1000).toFixed(0)}K` : channel.stats.subscribers}</p>
                     </div>
+                    {onDeleteChannel && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Delete button clicked for channel:', channel.id, channel.name);
+                          onDeleteChannel(channel.id);
+                        }}
+                        className="ml-2 p-1.5 hover:bg-[var(--error-red)]/20 rounded-full transition-colors"
+                        aria-label="Delete channel"
+                      >
+                        <X className="w-4 h-4 text-[var(--error-red)]" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

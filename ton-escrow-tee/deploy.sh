@@ -23,4 +23,4 @@ ecloud compute app upgrade 0x113DF00a8cb0Aa2b3cd12FF13Ac21c7f07a966Ec --image-re
 
 echo ""
 echo "=== Deployment Complete ==="
-echo "TEE URL: http://104.196.106.144:8000"
+echo "TEE URL: http://104.196.106.144:3000"

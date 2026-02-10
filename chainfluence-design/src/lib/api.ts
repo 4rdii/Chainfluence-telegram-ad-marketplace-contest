@@ -175,13 +175,16 @@ async function apiFetch<T>(
 ): Promise<T> {
   const method = options?.method || 'GET';
   const url = `${API_BASE_URL}${path}`;
+  
   dlog.info(`${method} ${path}`);
+  dlog.info(`  → Full URL: ${url}`);
 
   if (options?.body !== undefined) {
     const payload = typeof options.body === 'object' ? JSON.stringify(options.body) : String(options.body);
-    dlog.info(`  payload = ${payload.length > 300 ? payload.slice(0, 300) + '...' : payload}`);
+    dlog.info(`  → Payload length: ${payload.length} bytes`);
+    dlog.info(`  → Payload preview: ${payload.length > 300 ? payload.slice(0, 300) + '...' : payload}`);
   } else if (path.includes('?')) {
-    dlog.info(`  query = ${path.split('?')[1]}`);
+    dlog.info(`  → Query string: ${path.split('?')[1]}`);
   }
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -189,31 +192,115 @@ async function apiFetch<T>(
   if (withAuth) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
-  if (method === 'GET' && !options?.body) {
-    dlog.info(`  auth = ${withAuth ? 'yes' : 'no (public)'}`);
-  }
+  
+  dlog.info(`  → Headers:`, JSON.stringify(headers, null, 2));
+  dlog.info(`  → Auth: ${withAuth ? 'yes (Bearer token)' : 'no (public endpoint)'}`);
+
+  const fetchOptions: RequestInit = {
+    method,
+    headers,
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+    credentials: 'include', // Include credentials for CORS
+  };
+  
+  dlog.info(`  → Fetch options:`, {
+    method: fetchOptions.method,
+    headers: fetchOptions.headers,
+    hasBody: !!fetchOptions.body,
+    bodyLength: fetchOptions.body ? String(fetchOptions.body).length : 0,
+    credentials: fetchOptions.credentials,
+  });
 
   try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: options?.body ? JSON.stringify(options.body) : undefined,
-    });
+    dlog.info(`  → Starting fetch request...`);
+    dlog.info(`  → Browser origin: ${window.location.origin}`);
+    dlog.info(`  → Browser user agent: ${navigator.userAgent.substring(0, 100)}`);
+    const startTime = Date.now();
+    
+    const response = await fetch(url, fetchOptions);
+    const duration = Date.now() - startTime;
+    
+    dlog.info(`  → Fetch completed in ${duration}ms`);
+    dlog.info(`  → Response status: ${response.status} ${response.statusText}`);
+    dlog.info(`  → Response headers:`, Object.fromEntries(response.headers.entries()));
+    dlog.info(`  → Response ok: ${response.ok}`);
+    dlog.info(`  → Response type: ${response.type}`);
+    dlog.info(`  → Response url: ${response.url}`);
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      const msg = err.message || `${response.status} ${response.statusText}`;
+      let errorBody: any = {};
+      try {
+        const text = await response.text();
+        dlog.error(`  → Error response body (raw): ${text.substring(0, 500)}`);
+        errorBody = text ? JSON.parse(text) : {};
+      } catch (parseErr) {
+        dlog.error(`  → Failed to parse error response as JSON`);
+      }
+      
+      const msg = errorBody.message || `${response.status} ${response.statusText}`;
       dlog.error(`${method} ${path} → ${response.status}: ${msg}`);
       throw new ApiError(response.status, msg);
     }
 
     const data = await response.json();
-    dlog.info(`${method} ${path} → ${response.status} OK`);
+    dlog.info(`${method} ${path} → ${response.status} OK (${duration}ms)`);
     return data as T;
   } catch (e) {
-    if (e instanceof ApiError) throw e;
-    dlog.error(`${method} ${path} → NETWORK ERROR:`, e);
-    throw e;
+    // Re-throw ApiError as-is
+    if (e instanceof ApiError) {
+      throw e;
+    }
+    
+    // Enhanced error logging
+    const errorDetails: any = {
+      name: (e as Error).name,
+      message: (e as Error).message,
+      stack: (e as Error).stack,
+    };
+    
+    // Check if it's a network error
+    if (e instanceof TypeError) {
+      errorDetails.type = 'TypeError';
+      errorDetails.isNetworkError = true;
+      if ((e as TypeError).message.includes('fetch')) {
+        errorDetails.subtype = 'fetch_failed';
+      }
+      if ((e as TypeError).message.includes('Load failed')) {
+        errorDetails.subtype = 'load_failed';
+        errorDetails.possibleCauses = [
+          'CORS preflight (OPTIONS) failed - backend not allowing this origin',
+          'CORS headers missing or incorrect in backend response',
+          'Backend CORS not configured or backend not restarted after CORS changes',
+          'SSL certificate issue',
+          'Network connectivity problem',
+          'Request blocked by browser security policy',
+        ];
+        errorDetails.browserOrigin = window.location.origin;
+        errorDetails.telegramWebApp = typeof window.Telegram !== 'undefined' ? 'yes' : 'no';
+      }
+    }
+    
+    // Try to detect CORS-specific errors
+    if (e instanceof TypeError && (e as TypeError).message.includes('Load failed')) {
+      dlog.error(`  → CORS DIAGNOSIS:`);
+      dlog.error(`     - This is likely a CORS preflight failure`);
+      dlog.error(`     - Browser origin: ${window.location.origin}`);
+      dlog.error(`     - Backend URL: ${url}`);
+      dlog.error(`     - Check: Backend must allow origin "${window.location.origin}"`);
+      dlog.error(`     - Check: Backend must respond to OPTIONS requests with proper CORS headers`);
+      dlog.error(`     - Check: Backend was restarted after adding CORS configuration`);
+      dlog.error(`     - Check: Backend CORS must include credentials: true`);
+    }
+    
+    dlog.error(`${method} ${path} → NETWORK ERROR`);
+    dlog.error(`  → Error details:`, errorDetails);
+    dlog.error(`  → Full error object:`, e);
+    dlog.error(`  → URL attempted: ${url}`);
+    dlog.error(`  → Request method: ${method}`);
+    dlog.error(`  → Request headers sent:`, headers);
+    
+    // Wrap network errors
+    throw new Error(`Network error: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -269,6 +356,9 @@ export const api = {
 
     update: (id: string, data: { title?: string; category?: string; isActive?: boolean }) =>
       apiFetch<BackendChannel>(`/channels/${id}`, { method: 'PATCH', body: data }),
+
+    delete: (id: string) =>
+      apiFetch<{ message: string }>(`/channels/${id}`, { method: 'DELETE' }),
   },
 
   campaigns: {
