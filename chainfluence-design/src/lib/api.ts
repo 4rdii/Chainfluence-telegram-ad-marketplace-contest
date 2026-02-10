@@ -36,6 +36,14 @@ export interface BackendCampaign {
   category: string | null;
   status: string;
   budget: string | null;
+  creativeText: string | null;
+  contentGuidelines: string | null;
+  creativeImages: string[] | null;
+  preferredFormats: string[] | null;
+  minSubscribers: number | null;
+  minEngagement: number | null;
+  preferredCategories: string[] | null;
+  deadline: string | null;
   createdAt: string;
   updatedAt: string;
   offerCount?: number;
@@ -379,10 +387,20 @@ export const api = {
     getById: (id: number) =>
       apiFetch<BackendCampaign>(`/campaigns/${id}`, { isPublic: true }),
 
-    create: (data: { title: string; description?: string; category?: string; budget?: string }) =>
+    create: (data: {
+      title: string; description?: string; category?: string; budget?: string;
+      creativeText?: string; contentGuidelines?: string; creativeImages?: string[];
+      preferredFormats?: string[]; minSubscribers?: number; minEngagement?: number;
+      preferredCategories?: string[]; deadline?: string;
+    }) =>
       apiFetch<BackendCampaign>('/campaigns', { method: 'POST', body: data }),
 
-    update: (id: number, data: { title?: string; description?: string; category?: string; status?: string; budget?: string }) =>
+    update: (id: number, data: {
+      title?: string; description?: string; category?: string; status?: string; budget?: string;
+      creativeText?: string; contentGuidelines?: string; creativeImages?: string[];
+      preferredFormats?: string[]; minSubscribers?: number; minEngagement?: number;
+      preferredCategories?: string[]; deadline?: string;
+    }) =>
       apiFetch<BackendCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: data }),
 
     getOffers: (campaignId: number) =>
@@ -484,5 +502,29 @@ export const api = {
         '/escrow/verify-and-register',
         { method: 'POST', body: payload },
       ),
+  },
+
+  uploads: {
+    /** Upload an image file. Returns fileId and proxy URL. */
+    upload: async (file: File): Promise<{ fileId: string; url: string }> => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE_URL}/uploads`, {
+        method: 'POST',
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: formData,
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, `Upload failed: ${res.statusText}`);
+      }
+      return res.json();
+    },
+
+    /** Get the full proxy URL for a file_id */
+    getUrl: (fileId: string) => `${API_BASE_URL}/uploads/${encodeURIComponent(fileId)}`,
   },
 };

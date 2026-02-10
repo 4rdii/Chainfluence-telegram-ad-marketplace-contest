@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Upload, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowLeft, CheckCircle2, Upload, Loader2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -23,6 +23,9 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
   // Step 2: Creative & Content
   const [creativeText, setCreativeText] = useState('');
   const [contentGuidelines, setContentGuidelines] = useState('');
+  const [creativeImages, setCreativeImages] = useState<{ fileId: string; url: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Step 3: Budget & Requirements
   const [budgetPerChannel, setBudgetPerChannel] = useState(80);
@@ -56,6 +59,28 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
     );
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await api.uploads.upload(file);
+      setCreativeImages((prev) => [
+        ...prev,
+        { fileId: result.fileId, url: api.uploads.getUrl(result.fileId) },
+      ]);
+    } catch {
+      console.error('Failed to upload image');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = (fileId: string) => {
+    setCreativeImages((prev) => prev.filter((img) => img.fileId !== fileId));
+  };
+
   const [submitting, setSubmitting] = useState(false);
 
   const handleComplete = async () => {
@@ -66,6 +91,14 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
         description,
         category,
         budget: (totalBudget || budgetPerChannel).toString(),
+        creativeText,
+        contentGuidelines,
+        creativeImages: creativeImages.map((img) => img.fileId),
+        preferredFormats: selectedFormats,
+        minSubscribers,
+        minEngagement,
+        preferredCategories: selectedCategories,
+        deadline,
       });
       onComplete();
     } catch {
@@ -190,16 +223,59 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
 
             <div>
               <Label>Media Upload</Label>
-              <div className="mt-1 border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer bg-card">
-                <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground mb-1">Tap to upload images/banners</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <div
+                onClick={() => !uploading && fileInputRef.current?.click()}
+                className="mt-1 border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer bg-card"
+              >
+                {uploading ? (
+                  <Loader2 className="w-8 h-8 text-muted-foreground mx-auto mb-2 animate-spin" />
+                ) : (
+                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                )}
+                <p className="text-sm text-muted-foreground mb-1">
+                  {uploading ? 'Uploading...' : 'Tap to upload images/banners'}
+                </p>
                 <p className="text-xs text-muted-foreground">PNG, JPG up to 10MB</p>
               </div>
+              {creativeImages.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {creativeImages.map((img) => (
+                    <div key={img.fileId} className="relative w-20 h-20">
+                      <img
+                        src={img.url}
+                        alt="Upload"
+                        className="w-full h-full object-cover rounded-lg border border-border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(img.fileId)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="bg-card border border-border rounded-lg p-4">
               <h3 className="font-medium mb-2">Preview</h3>
               <div className="bg-background rounded-lg p-3">
+                {creativeImages.length > 0 && (
+                  <img
+                    src={creativeImages[0].url}
+                    alt="Preview"
+                    className="w-full rounded-lg mb-2"
+                  />
+                )}
                 <p className="text-sm whitespace-pre-line">
                   {creativeText || 'Your ad copy will appear here...'}
                 </p>
