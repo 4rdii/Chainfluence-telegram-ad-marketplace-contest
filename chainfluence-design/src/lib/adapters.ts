@@ -143,29 +143,99 @@ export function adaptOffer(bo: BackendOffer): Offer {
 
 // ── Deal adapter ──
 
+import type { DealTimeline } from '../types';
+
 const dealStatusMap: Record<string, DealStatus> = {
   active: 'DEPOSITED',
   released: 'RELEASED',
   refunded: 'REFUNDED',
 };
 
+const durationToFormat: Record<number, AdFormat> = {
+  86400: '1/24',
+  172800: '2/48',
+  259200: '3/72',
+  0: 'eternal',
+};
+
+function buildTimeline(bd: BackendDeal, status: DealStatus): DealTimeline[] {
+  const steps: DealTimeline[] = [];
+  const hasCreative = !!bd.creativeText;
+
+  // All deals start with deposit
+  steps.push({
+    step: 'Escrow Deposited',
+    status: 'completed',
+    timestamp: bd.createdAt,
+    details: bd.escrowAddress ? `Escrow: ${bd.escrowAddress.slice(0, 12)}...` : undefined,
+  });
+
+  // Creative submitted
+  steps.push({
+    step: 'Creative Submitted',
+    status: hasCreative ? 'completed' : 'current',
+    details: hasCreative ? 'Ad copy and media provided' : 'Waiting for advertiser to submit creative',
+  });
+
+  // Signatures
+  const hasBothSigs = bd.publisherSigned && bd.advertiserSigned;
+  const hasAnySig = bd.publisherSigned || bd.advertiserSigned;
+  steps.push({
+    step: 'Signatures Collected',
+    status: hasBothSigs ? 'completed' : hasAnySig ? 'current' : 'future',
+    details: hasBothSigs
+      ? 'Both parties signed'
+      : bd.publisherSigned
+        ? 'Publisher signed, waiting for advertiser'
+        : bd.advertiserSigned
+          ? 'Advertiser signed, waiting for publisher'
+          : 'Waiting for both parties to sign',
+  });
+
+  // Post confirmed
+  const isPosted = bd.postId != null;
+  steps.push({
+    step: 'Ad Posted',
+    status: isPosted ? 'completed' : hasBothSigs ? 'current' : 'future',
+    timestamp: bd.postedAt ? new Date(bd.postedAt * 1000).toISOString() : undefined,
+    details: isPosted ? `Post ID: ${bd.postId}` : undefined,
+  });
+
+  // Released / Refunded
+  const isFinal = status === 'RELEASED' || status === 'REFUNDED';
+  steps.push({
+    step: status === 'REFUNDED' ? 'Funds Refunded' : 'Funds Released',
+    status: isFinal ? 'completed' : 'future',
+    timestamp: bd.releasedAt || bd.refundedAt || undefined,
+    details: bd.txHash ? `TX: ${bd.txHash.slice(0, 16)}...` : undefined,
+  });
+
+  return steps;
+}
+
 export function adaptDeal(bd: BackendDeal): Deal {
   const amountTon = bd.amount ? Number(bd.amount) / 1_000_000_000 : 0;
   const fee = amountTon * 0.05;
+  const status = dealStatusMap[bd.status] || 'DEPOSITED';
+  const format = bd.duration != null ? (durationToFormat[bd.duration] || '1/24') : '1/24';
 
   return {
     id: bd.dealId.toString(),
     advertiserId: bd.advertiserId ?? '',
     publisherId: bd.publisherId ?? '',
     channelId: bd.channelId ?? '',
-    format: '1/24',
+    format,
     amount: amountTon,
     platformFee: fee,
     totalAmount: amountTon,
-    scheduledDate: '',
-    status: dealStatusMap[bd.status] || 'DEPOSITED',
+    scheduledDate: bd.createdAt,
+    status,
     escrowAddress: bd.escrowAddress ?? '',
-    timeline: [],
+    creativeText: bd.creativeText || undefined,
+    creativeImages: Array.isArray(bd.creativeImages)
+      ? bd.creativeImages.map((id) => api.uploads.getUrl(id))
+      : undefined,
+    timeline: buildTimeline(bd, status),
     createdAt: bd.createdAt,
     completedAt: bd.releasedAt || bd.refundedAt || undefined,
   };

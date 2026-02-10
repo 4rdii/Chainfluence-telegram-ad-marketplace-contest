@@ -82,6 +82,8 @@ export interface BackendDeal {
   releasedAt: string | null;
   refundedAt: string | null;
   txHash: string | null;
+  creativeText: string | null;
+  creativeImages: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -437,6 +439,8 @@ export const api = {
       contentHash?: string;
       publisherWallet?: string;
       advertiserWallet?: string;
+      creativeText?: string;
+      creativeImages?: string[];
     }) =>
       apiFetch<BackendDeal>('/deals/register', { method: 'POST', body: data }),
   },

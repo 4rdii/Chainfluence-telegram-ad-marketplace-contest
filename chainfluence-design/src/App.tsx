@@ -7,7 +7,7 @@ import { ChannelsScreen } from './components/screens/ChannelsScreen';
 import { CampaignsScreen } from './components/screens/CampaignsScreen';
 import { DealsScreen } from './components/screens/DealsScreen';
 import { ProfileScreen } from './components/screens/ProfileScreen';
-import { ChannelDetailScreen } from './components/screens/ChannelDetailScreen';
+import { ChannelDetailScreen, type BookingData } from './components/screens/ChannelDetailScreen';
 import { CampaignDetailScreen } from './components/screens/CampaignDetailScreen';
 import { DealDetailScreen } from './components/screens/DealDetailScreen';
 import { AddChannelScreen } from './components/screens/AddChannelScreen';
@@ -441,12 +441,12 @@ export default function App() {
     }
   };
 
-  const handleBookAdSlot = async (channel: Channel) => {
-    const cheapest = channel.pricing.find(p => p.enabled);
-    if (!cheapest) return;
+  const handleBookAdSlot = async (channel: Channel, booking: BookingData) => {
+    const pricing = channel.pricing.find(p => p.format === booking.format && p.enabled);
+    if (!pricing) return;
 
-    const fee = cheapest.price * 0.05;
-    const totalAmount = cheapest.price + fee;
+    const fee = pricing.price * 0.05;
+    const totalAmount = pricing.price + fee;
 
     // Generate a deal ID (in production, the backend assigns this)
     const dealId = Date.now() % 1_000_000;
@@ -456,14 +456,13 @@ export default function App() {
       const { address } = await api.escrow.createWallet(dealId);
 
       // Compute content hash from the creative text
-      const contentText = ''; // Creative not yet known at booking time
-      const contentHashStr = await computeContentHash(contentText);
+      const contentHashStr = await computeContentHash(booking.creativeText);
 
       // Map format → duration
       const formatDurations: Record<string, number> = {
         '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
       };
-      const duration = formatDurations[cheapest.format] || 86400;
+      const duration = formatDurations[booking.format] || 86400;
       const amountNano = Math.floor(totalAmount * 1_000_000_000).toString();
 
       // Get the advertiser's connected wallet address
@@ -483,6 +482,8 @@ export default function App() {
         duration,
         contentHash: contentHashStr,
         advertiserWallet,
+        creativeText: booking.creativeText,
+        creativeImages: booking.creativeImages,
       });
 
       dlog.info('Navigating to payment screen', { dealId, totalAmount, address });
@@ -491,7 +492,7 @@ export default function App() {
         dealId,
         amount: totalAmount,
         escrowAddress: address,
-        dealLabel: `${channel.name} - ${cheapest.format}`,
+        dealLabel: `${channel.name} - ${booking.format}`,
       });
     } catch (error) {
       dlog.error('Failed to book ad slot:', error);

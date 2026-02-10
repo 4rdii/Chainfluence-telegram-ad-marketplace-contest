@@ -189,8 +189,8 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
             <span>{deal.platformFee} TON</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Scheduled</span>
-            <span className="text-sm">{formatDate(deal.scheduledDate)}</span>
+            <span className="text-muted-foreground">Created</span>
+            <span className="text-sm">{formatDate(deal.createdAt)}</span>
           </div>
           <div className="pt-2 border-t border-border">
             <div className="flex items-center justify-between mb-2">
