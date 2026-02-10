@@ -62,7 +62,8 @@ type Screen =
   | { type: 'createCampaign' }
   | { type: 'notifications' }
   | { type: 'myCampaigns' }
-  | { type: 'myOffers' };
+  | { type: 'myOffers' }
+  | { type: 'payment'; dealId: number; amount: number; escrowAddress: string; dealLabel: string };
 
 export default function App() {
   const [tonConnectUI] = useTonConnectUI();
@@ -75,12 +76,6 @@ export default function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [offers, setOffers] = useState(mockOffers);
-  const [paymentModal, setPaymentModal] = useState<{
-    dealId: number;
-    amount: number;
-    escrowAddress: string;
-    dealLabel: string;
-  } | null>(null);
 
   // ── Data loaders ──
 
@@ -490,14 +485,16 @@ export default function App() {
         advertiserWallet,
       });
 
-      setPaymentModal({
+      dlog.info('Navigating to payment screen', { dealId, totalAmount, address });
+      setScreen({
+        type: 'payment',
         dealId,
         amount: totalAmount,
         escrowAddress: address,
         dealLabel: `${channel.name} - ${cheapest.format}`,
       });
     } catch (error) {
-      console.error('Failed to create escrow wallet:', error);
+      dlog.error('Failed to book ad slot:', error);
     }
   };
 
@@ -814,6 +811,18 @@ export default function App() {
             }}
           />
         )}
+
+        {screen.type === 'payment' && (
+          <PaymentModal
+            dealId={screen.dealId}
+            amount={screen.amount}
+            escrowAddress={screen.escrowAddress}
+            dealLabel={screen.dealLabel}
+            onPaymentSent={handlePaymentSent}
+            onConfirm={() => setScreen({ type: 'tab', tab: 'deals' })}
+            onClose={() => setScreen({ type: 'tab', tab: 'channels' })}
+          />
+        )}
       </div>
 
       {/* Bottom Navigation */}
@@ -822,19 +831,6 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={(tab) => setScreen({ type: 'tab', tab })}
           notificationCount={unreadNotifications}
-        />
-      )}
-
-      {/* Payment Modal */}
-      {paymentModal && (
-        <PaymentModal
-          dealId={paymentModal.dealId}
-          amount={paymentModal.amount}
-          escrowAddress={paymentModal.escrowAddress}
-          dealLabel={paymentModal.dealLabel}
-          onPaymentSent={handlePaymentSent}
-          onConfirm={() => setPaymentModal(null)}
-          onClose={() => setPaymentModal(null)}
         />
       )}
 
