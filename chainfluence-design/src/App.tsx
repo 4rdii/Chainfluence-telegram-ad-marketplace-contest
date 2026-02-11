@@ -645,34 +645,7 @@ export default function App() {
     if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
   };
 
-  /**
-   * Called when the publisher confirms they have posted the ad.
-   *
-   * The publisher should have already signed the deal (at deal acceptance).
-   * This just submits the post link. The backend sets postId/postedAt and
-   * auto-triggers TEE if both signatures are present.
-   *
-   * If the publisher hasn't signed yet, we prompt them to sign here too.
-   */
-  const handleConfirmPosted = async (deal: Deal, postLink: string) => {
-    const dealId = parseInt(deal.id, 10);
-
-    // Check if publisher has already signed; if not, sign now
-    const backendDeal = await api.deals.getById(dealId);
-    if (!backendDeal.publisherSigned) {
-      const dealParams = buildSignableParams(backendDeal);
-      await signAndSubmitDeal(dealId, 'publisher', dealParams);
-    }
-
-    // Submit post link → backend sets postId/postedAt + may trigger TEE
-    const result = await api.escrow.confirmPosted({ dealId, postLink });
-
-    if (result.teeResult && !result.teeResult.success) {
-      throw new Error(result.teeResult.error || 'TEE verification failed');
-    }
-
-    await loadDeals();
-  };
+  // Note: Post confirmation removed — backend auto-posts after both signatures
 
   // ── Deal completion ──
 
@@ -802,7 +775,6 @@ export default function App() {
             onApproveDeal={handleApproveDeal}
             onRejectDeal={handleRejectDeal}
             onAdvertiserApprove={handleAdvertiserApprove}
-            onConfirmPosted={handleConfirmPosted}
           />
         )}
 
