@@ -439,6 +439,13 @@ export const api = {
     reject: (dealId: number) =>
       apiFetch<BackendDeal>(`/deals/${dealId}/reject`, { method: 'POST' }),
 
+    /** Post creative to channel (publisher only). Downloads images via Bot API, posts via GramJS. */
+    post: (dealId: number) =>
+      apiFetch<{ success: boolean; messageId: number; channelUsername: string; deal: BackendDeal }>(
+        `/deals/${dealId}/post`,
+        { method: 'POST' },
+      ),
+
     register: (data: {
       dealId: number;
       verificationChatId: number;

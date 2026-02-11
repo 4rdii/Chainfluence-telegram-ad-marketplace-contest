@@ -1,5 +1,5 @@
 import { Deal, Channel, User } from '../../types';
-import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, XCircle, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, RefreshCw, XCircle, Send } from 'lucide-react';
 import { StatusBadge } from '../StatusBadge';
 import { FormatBadge } from '../FormatBadge';
 import { Button } from '../ui/button';
@@ -16,14 +16,17 @@ interface DealDetailScreenProps {
   onRejectDeal?: (deal: Deal) => Promise<void>;
   /** Advertiser approves the deal (prompts wallet to sign) */
   onAdvertiserApprove?: (deal: Deal) => Promise<void>;
+  /** Refresh deal status from backend */
+  onRefresh?: () => Promise<void>;
 }
 
 export function DealDetailScreen({
   deal, channel, user, onBack,
-  onApproveDeal, onRejectDeal, onAdvertiserApprove,
+  onApproveDeal, onRejectDeal, onAdvertiserApprove, onRefresh,
 }: DealDetailScreenProps) {
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const isPublisher = deal.publisherId === user.id;
@@ -116,6 +119,18 @@ export function DealDetailScreen({
             <h1 className="text-xl font-semibold mb-1">Deal #{deal.id}</h1>
             <StatusBadge status={deal.status} />
           </div>
+          {onRefresh && (
+            <button
+              onClick={async () => {
+                setIsRefreshing(true);
+                try { await onRefresh(); } finally { setIsRefreshing(false); }
+              }}
+              disabled={isRefreshing}
+              className="p-2 rounded-lg hover:bg-accent transition-colors"
+            >
+              <RefreshCw className={`w-5 h-5 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -341,14 +356,14 @@ export function DealDetailScreen({
         </div>
       )}
 
-      {/* 5. Both signatures collected — waiting for backend auto-post */}
+      {/* 5. Both signatures collected — auto-posting to channel */}
       {hasBothSigs && !isPosted && deal.status !== 'REFUNDED' && (
         <div className="p-4 border-b border-border">
           <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg text-center">
             <Send className="w-8 h-8 text-primary mx-auto mb-2" />
             <p className="font-medium mb-1">Both Parties Approved</p>
             <p className="text-sm text-muted-foreground">
-              The ad will be automatically posted to the channel shortly.
+              Posting the ad to the channel...
             </p>
           </div>
         </div>

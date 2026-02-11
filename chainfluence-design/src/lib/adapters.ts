@@ -213,7 +213,7 @@ function buildTimeline(bd: BackendDeal, status: DealStatus): DealTimeline[] {
     details: isPosted
       ? `Post ID: ${bd.postId}`
       : hasBothSigs
-        ? 'Auto-posting to channel...'
+        ? 'Posting to channel...'
         : undefined,
   });
 

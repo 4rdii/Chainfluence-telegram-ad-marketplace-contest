@@ -590,7 +590,20 @@ export default function App() {
   };
 
   /**
+   * After signing, if both parties have signed, auto-post creative to channel.
+   */
+  const autoPostIfReady = async (dealId: number, signResult: { deal: { publisherSigned: boolean; advertiserSigned: boolean; postId: number | null } }) => {
+    const d = signResult.deal;
+    if (d.publisherSigned && d.advertiserSigned && d.postId == null) {
+      dlog.info(`Both parties signed deal ${dealId}, auto-posting to channel...`);
+      const postResult = await api.deals.post(dealId);
+      dlog.info(`Deal ${dealId} posted to @${postResult.channelUsername}, messageId=${postResult.messageId}`);
+    }
+  };
+
+  /**
    * Channel owner approves the deal — prompts their wallet to sign.
+   * If both parties have now signed, auto-posts the creative to the channel.
    */
   const handleApproveDeal = async (deal: Deal) => {
     const dealId = parseInt(deal.id, 10);
@@ -600,11 +613,12 @@ export default function App() {
 
     const backendDeal = await api.deals.getById(dealId);
     const dealParams = buildSignableParams(backendDeal, { role: 'publisher', address: myWallet });
-    await signAndSubmitDeal(dealId, 'publisher', dealParams);
+    const result = await signAndSubmitDeal(dealId, 'publisher', dealParams);
 
     dlog.info(`Publisher signature submitted for dealId=${dealId}`);
+    await autoPostIfReady(dealId, result);
+
     await loadDeals();
-    // Navigate to refreshed deal
     const updatedDeals = await api.deals.list();
     const updated = updatedDeals.find(d => d.dealId === dealId);
     if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
@@ -626,6 +640,7 @@ export default function App() {
 
   /**
    * Advertiser approves the deal — prompts their wallet to sign.
+   * If both parties have now signed, auto-posts the creative to the channel.
    */
   const handleAdvertiserApprove = async (deal: Deal) => {
     const dealId = parseInt(deal.id, 10);
@@ -635,17 +650,16 @@ export default function App() {
 
     const backendDeal = await api.deals.getById(dealId);
     const dealParams = buildSignableParams(backendDeal, { role: 'advertiser', address: myWallet });
-    await signAndSubmitDeal(dealId, 'advertiser', dealParams);
+    const result = await signAndSubmitDeal(dealId, 'advertiser', dealParams);
 
     dlog.info(`Advertiser signature submitted for dealId=${dealId}`);
+    await autoPostIfReady(dealId, result);
+
     await loadDeals();
-    // Navigate to refreshed deal
     const updatedDeals = await api.deals.list();
     const updated = updatedDeals.find(d => d.dealId === dealId);
     if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
   };
-
-  // Note: Post confirmation removed — backend auto-posts after both signatures
 
   // ── Deal completion ──
 
@@ -775,6 +789,12 @@ export default function App() {
             onApproveDeal={handleApproveDeal}
             onRejectDeal={handleRejectDeal}
             onAdvertiserApprove={handleAdvertiserApprove}
+            onRefresh={async () => {
+              const dealId = parseInt(screen.deal.id, 10);
+              await loadDeals();
+              const fresh = await api.deals.getById(dealId);
+              setScreen({ type: 'dealDetail', deal: adaptDeal(fresh) });
+            }}
           />
         )}
 
