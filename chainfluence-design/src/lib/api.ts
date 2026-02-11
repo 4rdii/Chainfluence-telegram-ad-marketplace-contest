@@ -414,7 +414,7 @@ export const api = {
       apiFetch<BackendCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: data }),
 
     getOffers: (campaignId: number) =>
-      apiFetch<BackendOffer[]>(`/campaigns/${campaignId}/offers`, { isPublic: true }),
+      apiFetch<BackendOffer[]>(`/campaigns/${campaignId}/offers`),
 
     createOffer: (campaignId: number, data: { channelId: number; amount?: string; format?: string }) =>
       apiFetch<BackendOffer>(`/campaigns/${campaignId}/offers`, { method: 'POST', body: data }),
