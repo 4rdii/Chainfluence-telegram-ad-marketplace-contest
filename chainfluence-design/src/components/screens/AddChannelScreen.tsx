@@ -67,6 +67,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
   const [channelEngagement, setChannelEngagement] = useState<number | null>(null);
   const [channelPostsPerWeek, setChannelPostsPerWeek] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [priceStrings, setPriceStrings] = useState<Record<string, string>>({});
 
   const handleVerifyChannel = async () => {
     setVerifying(true);
@@ -410,13 +411,20 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                   {p.enabled && (
                     <div className="relative">
                       <Input
-                        type="number"
-                        value={p.price || ''}
-                        onChange={(e) => updatePricing(p.format, 'price', Number(e.target.value))}
+                        type="text"
+                        inputMode="decimal"
+                        value={priceStrings[p.format] ?? (p.price ? String(p.price) : '')}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                            setPriceStrings((prev: Record<string, string>) => ({ ...prev, [p.format]: v }));
+                            const num = parseFloat(v);
+                            if (!isNaN(num)) updatePricing(p.format, 'price', num);
+                            else if (v === '') updatePricing(p.format, 'price', 0);
+                          }
+                        }}
                         placeholder="Enter price"
                         className="pr-12"
-                        min="0.01"
-                        step="0.01"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                         TON
