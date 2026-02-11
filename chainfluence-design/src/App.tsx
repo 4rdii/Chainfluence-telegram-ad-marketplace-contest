@@ -830,7 +830,13 @@ export default function App() {
       {screen.type === 'tab' && (
         <BottomNav
           activeTab={activeTab}
-          onTabChange={(tab) => setScreen({ type: 'tab', tab })}
+          onTabChange={(tab) => {
+            setScreen({ type: 'tab', tab });
+            if (tab === 'channels') loadChannels();
+            else if (tab === 'campaigns') loadCampaigns();
+            else if (tab === 'deals') loadDeals();
+            else if (tab === 'home') { loadDeals(); loadNotifications(); }
+          }}
           notificationCount={unreadNotifications}
         />
       )}
