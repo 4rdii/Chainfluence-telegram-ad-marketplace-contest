@@ -8,6 +8,8 @@ export default () => ({
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     apiId: parseInt(process.env.TELEGRAM_API_ID ?? '0', 10),
     apiHash: process.env.TELEGRAM_API_HASH ?? '',
+    /** Optional. User session for channel verification (MTProto). Leave empty to use bot for channel checks. */
+    sessionString: process.env.TELEGRAM_SESSION_STRING ?? '',
   },
   tee: {
     url: process.env.TEE_URL,

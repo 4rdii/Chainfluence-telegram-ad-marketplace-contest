@@ -20,17 +20,18 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "telegram-session": "node --env-file=.env scripts/create-telegram-session.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.1",
-    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/jwt": "^11.0.0",
     "@nestjs/passport": "^11.0.0",
     "@nestjs/platform-express": "^11.0.1",
-    "@nestjs/schedule": "^4.0.0",
-    "@nestjs/swagger": "^8.1.1",
+    "@nestjs/schedule": "^6.0.0",
+    "@nestjs/swagger": "^11.0.0",
     "@prisma/client": "^6.0.0",
     "@ton/core": "^0.63.0",
     "@ton/ton": "^16.2.2",

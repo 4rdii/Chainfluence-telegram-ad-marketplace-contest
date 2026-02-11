@@ -8,6 +8,7 @@ import { LoggerService } from '../logger/logger.service';
 export class GramJsService implements OnModuleInit, OnModuleDestroy {
   private client!: TelegramClient;
   private ready = false;
+  private userSessionMode = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -17,24 +18,40 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const apiId = this.config.get<number>('telegram.apiId');
     const apiHash = this.config.get<string>('telegram.apiHash');
+    const sessionString = this.config.get<string>('telegram.sessionString');
     const botToken = this.config.get<string>('telegram.botToken');
 
-    if (!apiId || !apiHash || !botToken) {
+    if (!apiId || !apiHash) {
       this.logger.warn(
-        'TELEGRAM_API_ID, TELEGRAM_API_HASH or TELEGRAM_BOT_TOKEN not set – GramJS client disabled',
+        'TELEGRAM_API_ID or TELEGRAM_API_HASH not set – GramJS client disabled',
         'GramJsService',
       );
       return;
     }
 
-    const stringSession = new StringSession('');
-    this.client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 5,
-    });
+    this.client = new TelegramClient(
+      new StringSession(sessionString ?? ''),
+      apiId,
+      apiHash,
+      { connectionRetries: 5 },
+    );
 
-    await this.client.start({ botAuthToken: botToken });
+    if (sessionString?.trim()) {
+      await this.client.connect();
+      this.userSessionMode = true;
+      this.logger.log('GramJS client connected via user session (MTProto)', 'GramJsService');
+    } else if (botToken) {
+      await this.client.start({ botAuthToken: botToken });
+      this.logger.log('GramJS client connected via MTProto', 'GramJsService');
+    } else {
+      this.logger.warn(
+        'TELEGRAM_SESSION_STRING or TELEGRAM_BOT_TOKEN required – GramJS client disabled',
+        'GramJsService',
+      );
+      return;
+    }
+
     this.ready = true;
-    this.logger.log('GramJS client connected via MTProto', 'GramJsService');
   }
 
   async onModuleDestroy() {
@@ -46,6 +63,10 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
 
   isReady(): boolean {
     return this.ready;
+  }
+
+  isUserSession(): boolean {
+    return this.ready && this.userSessionMode;
   }
 
   getClient(): TelegramClient {
@@ -91,6 +112,38 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
     const messages =
       'messages' in result ? (result.messages as Api.Message[]) : [];
     return messages.filter((m) => m.className === 'Message');
+  }
+
+  /**
+   * Check if the current (session) user is admin or creator in the channel.
+   * Only valid when isUserSession() is true. Use for channel verification.
+   */
+  async isSessionUserChannelAdmin(channelUsername: string): Promise<boolean> {
+    if (!this.userSessionMode) return false;
+    const username = channelUsername.replace(/^@/, '');
+    const resolved = await this.getClient().invoke(
+      new Api.contacts.ResolveUsername({ username }),
+    );
+    const peer = resolved.peer;
+    if (!(peer instanceof Api.PeerChannel)) return false;
+    const chat = resolved.chats.find(
+      (c) => c instanceof Api.Channel && c.id.equals(peer.channelId),
+    );
+    if (!(chat instanceof Api.Channel)) return false;
+    const inputChannel = new Api.InputChannel({
+      channelId: chat.id,
+      accessHash: (chat.accessHash ?? BigInt(0)) as Api.long,
+    });
+    const result = await this.getClient().invoke(
+      new Api.channels.GetParticipant({
+        channel: inputChannel,
+        participant: new Api.InputPeerSelf(),
+      }),
+    );
+    const p = (result as { participant?: Api.TypeChannelParticipant }).participant;
+    return (
+      p instanceof Api.ChannelParticipantAdmin || p instanceof Api.ChannelParticipantCreator
+    );
   }
 
   /**
