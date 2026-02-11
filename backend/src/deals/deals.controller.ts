@@ -22,6 +22,14 @@ export class DealsController {
     return this.dealsService.rejectDeal(dealId, userId);
   }
 
+  @Post(':dealId/post')
+  postCreative(
+    @CurrentUserId() userId: number,
+    @Param('dealId', ParseIntPipe) dealId: number,
+  ) {
+    return this.dealsService.postCreative(dealId, userId);
+  }
+
   @Get()
   findAll(@CurrentUserId() userId: number) {
     return this.dealsService.findAll(userId);
