@@ -182,14 +182,16 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Get average views from the latest posts in a channel (uses GetHistory).
-   * Fetches up to 30 recent messages, filters for posts with views, takes the 10 most recent.
-   * Returns null if user session is not available (GetHistory requires user session).
+   * Get channel stats from a single GetHistory call: avg views (last 10 posts) and posts in last 7 days.
+   * One API call for both. Returns nulls if user session not available or no data.
    */
-  async getChannelAverageViews(channelUsername: string): Promise<number | null> {
+  async getChannelHistoryStats(channelUsername: string): Promise<{
+    avgViews: number | null;
+    postsPerWeek: number | null;
+  }> {
     if (!this.userSessionMode) {
-      this.logger.warn('getChannelAverageViews requires user session', 'GramJsService');
-      return null;
+      this.logger.warn('getChannelHistoryStats requires user session', 'GramJsService');
+      return { avgViews: null, postsPerWeek: null };
     }
     try {
       const username = channelUsername.replace(/^@/, '');
@@ -197,12 +199,14 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
         new Api.contacts.ResolveUsername({ username }),
       );
       const peer = resolved.peer;
-      if (!(peer instanceof Api.PeerChannel)) return null;
+      if (!(peer instanceof Api.PeerChannel)) {
+        return { avgViews: null, postsPerWeek: null };
+      }
 
       const result = await this.getClient().invoke(
         new Api.messages.GetHistory({
           peer,
-          limit: 30,
+          limit: 100,
           offsetId: 0,
           offsetDate: 0,
           addOffset: 0,
@@ -213,36 +217,62 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
       );
 
       const messages = 'messages' in result ? result.messages : [];
-      const postsWithViews = messages
-        .filter((m): m is Api.Message => m instanceof Api.Message && m.views !== undefined)
+      const validMessages = messages.filter((m): m is Api.Message => m instanceof Api.Message);
+
+      // Avg views: 10 most recent posts that have views
+      const postsWithViews = validMessages
+        .filter((m) => m.views !== undefined)
         .slice(0, 10);
+      const avgViews =
+        postsWithViews.length === 0
+          ? null
+          : Math.round(
+              postsWithViews.reduce((sum, m) => sum + (m.views ?? 0), 0) / postsWithViews.length,
+            );
 
-      if (postsWithViews.length === 0) return null;
+      // Posts per week: count in last 7 days
+      const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+      const postsInLastWeek = validMessages.filter((m) => {
+        const msgDate = typeof m.date === 'number' ? m.date : Number(m.date);
+        return msgDate >= sevenDaysAgo;
+      });
+      const postsPerWeek = postsInLastWeek.length;
 
-      const totalViews = postsWithViews.reduce((sum, m) => sum + (m.views ?? 0), 0);
-      return Math.round(totalViews / postsWithViews.length);
+      return { avgViews, postsPerWeek };
     } catch (err) {
       this.logger.warn(
-        `getChannelAverageViews failed for ${channelUsername}: ${err instanceof Error ? err.message : String(err)}`,
+        `getChannelHistoryStats failed for ${channelUsername}: ${err instanceof Error ? err.message : String(err)}`,
         'GramJsService',
       );
-      return null;
+      return { avgViews: null, postsPerWeek: null };
     }
   }
 
   /**
    * Get detailed broadcast stats for a channel (admin-only).
-   * Returns language distribution, engagement rate, and top posts views.
+   * Returns language distribution, engagement rate, reach, and other metrics.
    * Requires user session and admin access to the channel.
    */
   async getChannelBroadcastStats(channelUsername: string): Promise<{
     languageDistribution: Record<string, number> | null;
     engagementRate: number | null;
     topPostsViews: number[] | null;
+    avgReach: number | null;
+    sharesPerPost: number | null;
+    reactionsPerPost: number | null;
+    notificationsEnabled: number | null;
   }> {
     if (!this.userSessionMode) {
       this.logger.warn('getChannelBroadcastStats requires user session', 'GramJsService');
-      return { languageDistribution: null, engagementRate: null, topPostsViews: null };
+      return {
+        languageDistribution: null,
+        engagementRate: null,
+        topPostsViews: null,
+        avgReach: null,
+        sharesPerPost: null,
+        reactionsPerPost: null,
+        notificationsEnabled: null,
+      };
     }
 
     try {
@@ -252,14 +282,30 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
       );
       const peer = resolved.peer;
       if (!(peer instanceof Api.PeerChannel)) {
-        return { languageDistribution: null, engagementRate: null, topPostsViews: null };
+        return {
+          languageDistribution: null,
+          engagementRate: null,
+          topPostsViews: null,
+          avgReach: null,
+          sharesPerPost: null,
+          reactionsPerPost: null,
+          notificationsEnabled: null,
+        };
       }
 
       const chat = resolved.chats.find(
         (c) => c instanceof Api.Channel && c.id.equals(peer.channelId),
       );
       if (!(chat instanceof Api.Channel)) {
-        return { languageDistribution: null, engagementRate: null, topPostsViews: null };
+        return {
+          languageDistribution: null,
+          engagementRate: null,
+          topPostsViews: null,
+          avgReach: null,
+          sharesPerPost: null,
+          reactionsPerPost: null,
+          notificationsEnabled: null,
+        };
       }
 
       const inputChannel = new Api.InputChannel({
@@ -284,11 +330,37 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
           `getChannelBroadcastStats: channel ${channelUsername} has ${memberCount} members (need 500+ for stats)`,
           'GramJsService',
         );
-        return { languageDistribution: null, engagementRate: null, topPostsViews: null };
+        return {
+          languageDistribution: null,
+          engagementRate: null,
+          topPostsViews: null,
+          avgReach: null,
+          sharesPerPost: null,
+          reactionsPerPost: null,
+          notificationsEnabled: null,
+        };
       }
+
+      this.logger.log(
+        `getChannelBroadcastStats: channel ${channelUsername} has ${memberCount} members (>=500), fetching broadcast stats...`,
+        'GramJsService',
+      );
 
       const stats = await this.getClient().invoke(
         new Api.stats.GetBroadcastStats({ dark: false, channel: inputChannel }),
+      );
+
+      this.logger.log(
+        `getChannelBroadcastStats: received stats for ${channelUsername}, processing...`,
+        'GramJsService',
+      );
+
+      // Log raw stats response for debugging
+      this.logger.log(
+        `getChannelBroadcastStats: RAW STATS RESPONSE: ${JSON.stringify(stats, (key, value) => 
+          typeof value === 'bigint' ? value.toString() : value
+        , 2)}`,
+        'GramJsService',
       );
 
       // Extract language distribution from followers_graph
@@ -313,44 +385,80 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
 
       // Calculate engagement rate from recent posts
       let engagementRate: number | null = null;
-      if (stats.recentPostsInteractions && 'data' in stats.recentPostsInteractions) {
-        const recentData = stats.recentPostsInteractions.data as any;
-        if (recentData && recentData.rows && Array.isArray(recentData.rows)) {
-          const rows = recentData.rows as any[];
-          let totalEngagement = 0;
-          let totalViews = 0;
-          for (const row of rows) {
-            if (Array.isArray(row.columns) && row.columns.length >= 2) {
-              const views = row.columns[0] || 0;
-              const interactions = row.columns[1] || 0;
-              totalViews += views;
-              totalEngagement += interactions;
-            }
-          }
-          if (totalViews > 0) {
-            engagementRate = (totalEngagement / totalViews) * 100;
-          }
+      if (stats.recentPostsInteractions && Array.isArray(stats.recentPostsInteractions)) {
+        const posts = stats.recentPostsInteractions as Array<{
+          views?: number;
+          forwards?: number;
+          reactions?: number;
+        }>;
+        let totalViews = 0;
+        let totalEngagement = 0;
+        for (const post of posts) {
+          totalViews += post.views ?? 0;
+          totalEngagement += (post.forwards ?? 0) + (post.reactions ?? 0);
+        }
+        if (totalViews > 0 && posts.length > 0) {
+          engagementRate = (totalEngagement / totalViews) * 100;
+          this.logger.log(
+            `getChannelBroadcastStats: engagementRate calculated: ${engagementRate.toFixed(2)}% (${totalEngagement} interactions / ${totalViews} views from ${posts.length} posts)`,
+            'GramJsService',
+          );
         }
       }
 
-      // Extract top posts views
+      // Extract top posts views from recentPostsInteractions
       let topPostsViews: number[] | null = null;
-      if (stats.topHoursGraph && 'data' in stats.topHoursGraph) {
-        const topData = stats.topHoursGraph.data as any;
-        if (topData && topData.rows && Array.isArray(topData.rows)) {
-          topPostsViews = (topData.rows as any[])
-            .map(row => (Array.isArray(row.columns) && row.columns[0]) || 0)
-            .slice(0, 10);
+      if (stats.recentPostsInteractions && Array.isArray(stats.recentPostsInteractions)) {
+        topPostsViews = (stats.recentPostsInteractions as Array<{ views?: number }>)
+          .map(post => post.views ?? 0)
+          .filter(v => v > 0)
+          .slice(0, 10);
+        if (topPostsViews.length > 0) {
+          this.logger.log(
+            `getChannelBroadcastStats: topPostsViews extracted: ${topPostsViews.length} posts with views: ${JSON.stringify(topPostsViews)}`,
+            'GramJsService',
+          );
         }
       }
 
-      return { languageDistribution, engagementRate, topPostsViews };
+      // Extract additional metrics from raw stats
+      const avgReach = (stats.viewsPerPost as { current?: number })?.current ?? null;
+      const sharesPerPost = (stats.sharesPerPost as { current?: number })?.current ?? null;
+      const reactionsPerPost = (stats.reactionsPerPost as { current?: number })?.current ?? null;
+      const enabledNot = stats.enabledNotifications as { part?: number; total?: number } | undefined;
+      const notificationsEnabled =
+        enabledNot?.total && enabledNot.total > 0
+          ? ((enabledNot.part ?? 0) / enabledNot.total) * 100
+          : null;
+
+      this.logger.log(
+        `getChannelBroadcastStats: completed for ${channelUsername} - languageDistribution: ${!!languageDistribution}, engagementRate: ${engagementRate?.toFixed(2) ?? 'null'}%, topPostsViews: ${topPostsViews?.length ?? 0}, avgReach: ${avgReach}, sharesPerPost: ${sharesPerPost}, reactionsPerPost: ${reactionsPerPost}, notificationsEnabled: ${notificationsEnabled?.toFixed(1) ?? 'null'}%`,
+        'GramJsService',
+      );
+
+      return {
+        languageDistribution,
+        engagementRate,
+        topPostsViews,
+        avgReach,
+        sharesPerPost,
+        reactionsPerPost,
+        notificationsEnabled,
+      };
     } catch (err) {
       this.logger.warn(
         `getChannelBroadcastStats failed for ${channelUsername}: ${err instanceof Error ? err.message : String(err)}`,
         'GramJsService',
       );
-      return { languageDistribution: null, engagementRate: null, topPostsViews: null };
+      return {
+        languageDistribution: null,
+        engagementRate: null,
+        topPostsViews: null,
+        avgReach: null,
+        sharesPerPost: null,
+        reactionsPerPost: null,
+        notificationsEnabled: null,
+      };
     }
   }
 
