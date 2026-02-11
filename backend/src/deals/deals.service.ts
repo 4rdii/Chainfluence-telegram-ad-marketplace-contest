@@ -69,7 +69,7 @@ export class DealsService {
         ? {
             publisherSignature: signatureData.signature,
             publisherPublicKey: signatureData.publicKey,
-            publisherWallet: signatureData.walletAddress,
+            publisherWallet: deal.publisherWallet ?? signatureData.walletAddress,
             publisherSignTimestamp: signatureData.timestamp,
             publisherSignDomain: signatureData.domain,
           }
@@ -81,11 +81,36 @@ export class DealsService {
             advertiserSignDomain: signatureData.domain,
           };
 
-    const updated = await this.prisma.deal.update({
+    let updated = await this.prisma.deal.update({
       where: { dealId },
       data,
     });
 
+    if (updated.publisherSignature && updated.advertiserSignature && updated.status === 'active') {
+      updated = await this.prisma.deal.update({
+        where: { dealId },
+        data: { status: 'approved' },
+      });
+    }
+
+    return this.toResponse(updated);
+  }
+
+  async rejectDeal(dealId: number, userId: number) {
+    const userIdBig = BigInt(userId);
+    const deal = await this.prisma.deal.findFirst({
+      where: { dealId, publisherId: userIdBig },
+    });
+    if (!deal) {
+      throw new NotFoundException('Deal not found');
+    }
+    if (deal.status !== 'active') {
+      throw new BadRequestException('Can only reject deals in active status');
+    }
+    const updated = await this.prisma.deal.update({
+      where: { id: deal.id },
+      data: { status: 'rejected', refundedAt: new Date() },
+    });
     return this.toResponse(updated);
   }
 

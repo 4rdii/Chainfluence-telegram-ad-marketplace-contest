@@ -415,8 +415,8 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                         onChange={(e) => updatePricing(p.format, 'price', Number(e.target.value))}
                         placeholder="Enter price"
                         className="pr-12"
-                        min="0"
-                        step="0.1"
+                        min="0.01"
+                        step="0.01"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                         TON

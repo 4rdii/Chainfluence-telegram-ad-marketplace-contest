@@ -1,9 +1,8 @@
 import { Deal, Channel, User } from '../../types';
-import { ArrowLeft, CheckCircle2, Clock, Copy, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, XCircle } from 'lucide-react';
 import { StatusBadge } from '../StatusBadge';
 import { FormatBadge } from '../FormatBadge';
 import { Button } from '../ui/button';
-import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useState } from 'react';
@@ -13,31 +12,45 @@ interface DealDetailScreenProps {
   channel: Channel;
   user: User;
   onBack: () => void;
-  /** Called when the publisher confirms the ad has been posted with the message link/ID */
+  /** Channel owner approves the deal (prompts wallet to sign) */
+  onApproveDeal?: (deal: Deal) => Promise<void>;
+  /** Channel owner rejects the deal (triggers refund) */
+  onRejectDeal?: (deal: Deal) => Promise<void>;
+  /** Advertiser approves the deal (prompts wallet to sign) */
+  onAdvertiserApprove?: (deal: Deal) => Promise<void>;
+  /** Publisher signs & posts the ad to channel, then confirms with post link */
   onConfirmPosted?: (deal: Deal, postLink: string) => Promise<void>;
 }
 
-export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted }: DealDetailScreenProps) {
-  const [creativeText, setCreativeText] = useState(deal.creativeText || '');
-  const [publisherFeedback, setPublisherFeedback] = useState('');
+export function DealDetailScreen({
+  deal, channel, user, onBack,
+  onApproveDeal, onRejectDeal, onAdvertiserApprove, onConfirmPosted,
+}: DealDetailScreenProps) {
   const [postLink, setPostLink] = useState('');
-  const [showCreativeForm, setShowCreativeForm] = useState(
-    deal.status === 'ACCEPTED' && deal.advertiserId === user.id && !deal.creativeText
-  );
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const [postSubmitError, setPostSubmitError] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const isPublisher = deal.publisherId === user.id;
   const isAdvertiser = deal.advertiserId === user.id;
 
+  // Derive signature state from timeline
+  const publisherSigned = deal.timeline.some(
+    s => s.step === 'Channel Owner Approved' && s.status === 'completed'
+  );
+  const advertiserSigned = deal.timeline.some(
+    s => s.step === 'Advertiser Approved' && s.status === 'completed'
+  );
+  const hasBothSigs = publisherSigned && advertiserSigned;
+  const hasCreative = !!deal.creativeText;
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     });
   };
 
@@ -51,32 +64,52 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
     return 'bg-muted';
   };
 
-  const handleSubmitCreative = () => {
-    console.log('Submit creative:', creativeText);
-    // In real app, submit to backend
-    setShowCreativeForm(false);
+  const handleApprove = async () => {
+    if (!onApproveDeal) return;
+    setIsApproving(true);
+    setActionError('');
+    try {
+      await onApproveDeal(deal);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to approve deal');
+    } finally {
+      setIsApproving(false);
+    }
   };
 
-  const handleApproveCreative = () => {
-    console.log('Approve creative');
-    // In real app, update deal status
+  const handleReject = async () => {
+    if (!onRejectDeal) return;
+    setIsRejecting(true);
+    setActionError('');
+    try {
+      await onRejectDeal(deal);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to reject deal');
+    } finally {
+      setIsRejecting(false);
+    }
   };
 
-  const handleRequestChanges = () => {
-    console.log('Request changes:', publisherFeedback);
-    // In real app, update deal status
+  const handleAdvertiserApprove = async () => {
+    if (!onAdvertiserApprove) return;
+    setIsApproving(true);
+    setActionError('');
+    try {
+      await onAdvertiserApprove(deal);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to approve deal');
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   const handleConfirmPosted = async () => {
     if (!postLink || !onConfirmPosted) return;
-
     setIsSubmittingPost(true);
     setPostSubmitError('');
-
     try {
       await onConfirmPosted(deal, postLink);
     } catch (error) {
-      console.error('Post confirmation failed:', error);
       setPostSubmitError(
         error instanceof Error ? error.message : 'Verification failed. Please try again.',
       );
@@ -96,7 +129,6 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
           <ArrowLeft className="w-5 h-5" />
           <span>Back</span>
         </button>
-
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-semibold mb-1">Deal #{deal.id}</h1>
@@ -108,11 +140,7 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
       {/* Party Info */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg">
-          <img
-            src={channel.avatar}
-            alt={channel.name}
-            className="w-12 h-12 rounded-full"
-          />
+          <img src={channel.avatar} alt={channel.name} className="w-12 h-12 rounded-full" />
           <div className="flex-1">
             <p className="font-medium">{channel.name}</p>
             <p className="text-sm text-muted-foreground">{channel.username}</p>
@@ -133,12 +161,8 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
             <div key={index} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStatusColor(step.status)}`}>
-                  {step.status === 'completed' && (
-                    <CheckCircle2 className="w-5 h-5 text-white" />
-                  )}
-                  {step.status === 'current' && (
-                    <Clock className="w-5 h-5 text-white" />
-                  )}
+                  {step.status === 'completed' && <CheckCircle2 className="w-5 h-5 text-white" />}
+                  {step.status === 'current' && <Clock className="w-5 h-5 text-white" />}
                 </div>
                 {index < deal.timeline.length - 1 && (
                   <div className={`w-0.5 h-12 ${step.status === 'completed' ? 'bg-[var(--success-green)]' : 'bg-muted'}`} />
@@ -209,40 +233,7 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
         </div>
       </div>
 
-      {/* Creative Section - Advertiser submits */}
-      {showCreativeForm && isAdvertiser && (
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold mb-3">Submit Your Ad Creative</h2>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="creative">Ad Copy</Label>
-              <Textarea
-                id="creative"
-                value={creativeText}
-                onChange={(e) => setCreativeText(e.target.value)}
-                placeholder="Enter your ad text here..."
-                rows={6}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Media Upload</Label>
-              <div className="mt-1 border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Tap to upload images</p>
-              </div>
-            </div>
-            <Button
-              onClick={handleSubmitCreative}
-              className="w-full bg-primary text-primary-foreground"
-            >
-              Submit Creative
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Creative Preview - Both see */}
+      {/* Creative Preview - Both see when creative exists */}
       {deal.creativeText && (
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold mb-3">Ad Creative</h2>
@@ -259,61 +250,122 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
               />
             ))}
           </div>
-
-          {/* Publisher Review Actions */}
-          {deal.status === 'CREATIVE_PENDING' && isPublisher && (
-            <div className="mt-4 space-y-3">
-              <Button
-                onClick={handleApproveCreative}
-                className="w-full bg-[var(--success-green)] text-white hover:bg-[var(--success-green)]/90"
-              >
-                Approve Creative
-              </Button>
-              <div className="space-y-2">
-                <Textarea
-                  value={publisherFeedback}
-                  onChange={(e) => setPublisherFeedback(e.target.value)}
-                  placeholder="Request changes (optional)"
-                  rows={3}
-                />
-                <Button
-                  onClick={handleRequestChanges}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Request Changes
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Advertiser waiting state */}
-          {deal.status === 'CREATIVE_PENDING' && isAdvertiser && (
-            <div className="mt-4 p-4 bg-accent/50 rounded-lg text-center">
-              <Clock className="w-8 h-8 text-[var(--pending-amber)] mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Waiting for publisher to review your creative
-              </p>
-            </div>
-          )}
-
-          {/* Publisher feedback */}
-          {deal.publisherFeedback && (
-            <div className="mt-4 p-4 bg-[var(--pending-amber)]/10 border border-[var(--pending-amber)]/30 rounded-lg">
-              <p className="text-sm font-medium mb-1">Publisher Feedback:</p>
-              <p className="text-sm text-muted-foreground">{deal.publisherFeedback}</p>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Post Confirmation - Publisher */}
-      {deal.status === 'APPROVED' && isPublisher && (
+      {/* ── ACTION SECTIONS ── */}
+
+      {/* 1. Channel Owner: Approve / Reject (after creative submitted, before signing) */}
+      {isPublisher && hasCreative && !publisherSigned && deal.status !== 'REFUNDED' && (
+        <div className="p-4 border-b border-border">
+          <h2 className="font-semibold mb-3">Review Deal</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Review the ad creative above. Approving will prompt your wallet to sign the deal.
+          </p>
+          {actionError && (
+            <p className="text-sm text-[var(--error-red)] mb-3">{actionError}</p>
+          )}
+          <div className="space-y-3">
+            <Button
+              onClick={handleApprove}
+              className="w-full bg-[var(--success-green)] text-white hover:bg-[var(--success-green)]/90"
+              disabled={isApproving || isRejecting}
+            >
+              {isApproving ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Signing...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Approve & Sign
+                </span>
+              )}
+            </Button>
+            <Button
+              onClick={handleReject}
+              variant="outline"
+              className="w-full text-[var(--error-red)] border-[var(--error-red)]/30 hover:bg-[var(--error-red)]/10"
+              disabled={isApproving || isRejecting}
+            >
+              {isRejecting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Rejecting...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <XCircle className="w-4 h-4" />
+                  Reject & Refund
+                </span>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Advertiser: Approve (after channel owner signed, before advertiser signs) */}
+      {isAdvertiser && publisherSigned && !advertiserSigned && deal.status !== 'REFUNDED' && (
+        <div className="p-4 border-b border-border">
+          <h2 className="font-semibold mb-3">Approve Deal</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            The channel owner has approved your ad. Sign to confirm the deal.
+          </p>
+          {actionError && (
+            <p className="text-sm text-[var(--error-red)] mb-3">{actionError}</p>
+          )}
+          <Button
+            onClick={handleAdvertiserApprove}
+            className="w-full bg-primary text-primary-foreground"
+            disabled={isApproving}
+          >
+            {isApproving ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Signing...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                Approve & Sign
+              </span>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* 3. Advertiser waiting for channel owner */}
+      {isAdvertiser && hasCreative && !publisherSigned && deal.status !== 'REFUNDED' && (
+        <div className="p-4 border-b border-border">
+          <div className="p-4 bg-accent/50 rounded-lg text-center">
+            <Clock className="w-8 h-8 text-[var(--pending-amber)] mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Waiting for channel owner to review your creative
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Channel owner waiting for advertiser to sign */}
+      {isPublisher && publisherSigned && !advertiserSigned && deal.status !== 'REFUNDED' && (
+        <div className="p-4 border-b border-border">
+          <div className="p-4 bg-accent/50 rounded-lg text-center">
+            <Clock className="w-8 h-8 text-[var(--pending-amber)] mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Waiting for advertiser to approve and sign
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Channel Owner: Sign & Post (after both signatures collected, before posting) */}
+      {isPublisher && hasBothSigs && !deal.postId && deal.status !== 'REFUNDED' && (
         <div className="p-4">
-          <h2 className="font-semibold mb-3">Confirm Posting</h2>
+          <h2 className="font-semibold mb-3">Post the Ad</h2>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Once you've posted the ad to your channel, confirm it here.
+              Both parties have signed. Post the ad creative to your channel and confirm below.
             </p>
             <div>
               <Label htmlFor="postLink">Message ID or Post Link</Label>
@@ -339,60 +391,44 @@ export function DealDetailScreen({ deal, channel, user, onBack, onConfirmPosted 
                   Verifying post...
                 </span>
               ) : (
-                "I've Posted the Ad"
+                "Confirm Ad Posted"
               )}
             </Button>
           </div>
         </div>
       )}
 
-      {/* Posted - Live Metrics */}
+      {/* 6. Posted - Waiting for release */}
       {deal.status === 'POSTED' && (
         <div className="p-4">
-          <h2 className="font-semibold mb-3">Live Metrics</h2>
-          <div className="bg-card border border-border rounded-lg p-4 space-y-4">
+          <h2 className="font-semibold mb-3">Ad is Live</h2>
+          <div className="bg-card border border-border rounded-lg p-4">
             {deal.postId && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Post Link</p>
-                <a
-                  href={deal.postId}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline break-all"
-                >
-                  {deal.postId}
-                </a>
+              <div className="mb-3">
+                <p className="text-xs text-muted-foreground mb-1">Post ID</p>
+                <p className="text-sm font-mono">{deal.postId}</p>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center p-3 bg-background rounded-lg">
-                <p className="text-2xl font-semibold mb-1">12,450</p>
-                <p className="text-xs text-muted-foreground">Views</p>
-              </div>
-              <div className="text-center p-3 bg-background rounded-lg">
-                <p className="text-2xl font-semibold mb-1">234</p>
-                <p className="text-xs text-muted-foreground">Forwards</p>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">Time remaining</span>
-                <span className="text-sm font-medium">18h 32m</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-[var(--ton-blue)] rounded-full h-2" style={{ width: '65%' }} />
-              </div>
+            <div className="p-3 bg-[var(--success-green)]/10 rounded-lg text-center">
+              <CheckCircle2 className="w-8 h-8 text-[var(--success-green)] mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Ad has been posted. Awaiting TEE verification and fund release.
+              </p>
             </div>
           </div>
+        </div>
+      )}
 
-          {isAdvertiser && (
-            <Button
-              variant="outline"
-              className="w-full mt-4 text-[var(--error-red)] border-[var(--error-red)]/30"
-            >
-              Report Issue
-            </Button>
-          )}
+      {/* Refunded state */}
+      {deal.status === 'REFUNDED' && (
+        <div className="p-4">
+          <div className="p-4 bg-[var(--error-red)]/10 border border-[var(--error-red)]/30 rounded-lg text-center">
+            <XCircle className="w-8 h-8 text-[var(--error-red)] mx-auto mb-2" />
+            <p className="text-sm font-medium">Deal Rejected</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Funds have been refunded to the advertiser.
+            </p>
+          </div>
         </div>
       )}
     </div>

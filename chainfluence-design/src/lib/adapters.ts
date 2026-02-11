@@ -147,6 +147,8 @@ import type { DealTimeline } from '../types';
 
 const dealStatusMap: Record<string, DealStatus> = {
   active: 'DEPOSITED',
+  approved: 'APPROVED',
+  rejected: 'REFUNDED',
   released: 'RELEASED',
   refunded: 'REFUNDED',
 };
@@ -161,8 +163,12 @@ const durationToFormat: Record<number, AdFormat> = {
 function buildTimeline(bd: BackendDeal, status: DealStatus): DealTimeline[] {
   const steps: DealTimeline[] = [];
   const hasCreative = !!bd.creativeText;
+  const isApproved = status === 'APPROVED' || bd.publisherSigned || bd.advertiserSigned || bd.postId != null || status === 'RELEASED' || status === 'REFUNDED';
+  const hasBothSigs = bd.publisherSigned && bd.advertiserSigned;
+  const isPosted = bd.postId != null;
+  const isFinal = status === 'RELEASED' || status === 'REFUNDED';
 
-  // All deals start with deposit
+  // 1. Escrow Deposited
   steps.push({
     step: 'Escrow Deposited',
     status: 'completed',
@@ -170,30 +176,36 @@ function buildTimeline(bd: BackendDeal, status: DealStatus): DealTimeline[] {
     details: bd.escrowAddress ? `Escrow: ${bd.escrowAddress.slice(0, 12)}...` : undefined,
   });
 
-  // Creative submitted
+  // 2. Creative Submitted
   steps.push({
     step: 'Creative Submitted',
     status: hasCreative ? 'completed' : 'current',
     details: hasCreative ? 'Ad copy and media provided' : 'Waiting for advertiser to submit creative',
   });
 
-  // Signatures
-  const hasBothSigs = bd.publisherSigned && bd.advertiserSigned;
-  const hasAnySig = bd.publisherSigned || bd.advertiserSigned;
+  // 3. Channel Owner Approved (publisher signs)
   steps.push({
-    step: 'Signatures Collected',
-    status: hasBothSigs ? 'completed' : hasAnySig ? 'current' : 'future',
-    details: hasBothSigs
-      ? 'Both parties signed'
-      : bd.publisherSigned
-        ? 'Publisher signed, waiting for advertiser'
-        : bd.advertiserSigned
-          ? 'Advertiser signed, waiting for publisher'
-          : 'Waiting for both parties to sign',
+    step: 'Channel Owner Approved',
+    status: bd.publisherSigned ? 'completed' : hasCreative ? 'current' : 'future',
+    details: bd.publisherSigned
+      ? 'Channel owner reviewed and signed'
+      : hasCreative
+        ? 'Waiting for channel owner to review'
+        : undefined,
   });
 
-  // Post confirmed
-  const isPosted = bd.postId != null;
+  // 4. Advertiser Approved (advertiser signs)
+  steps.push({
+    step: 'Advertiser Approved',
+    status: bd.advertiserSigned ? 'completed' : bd.publisherSigned ? 'current' : 'future',
+    details: bd.advertiserSigned
+      ? 'Advertiser reviewed and signed'
+      : bd.publisherSigned
+        ? 'Waiting for advertiser to approve'
+        : undefined,
+  });
+
+  // 5. Ad Posted
   steps.push({
     step: 'Ad Posted',
     status: isPosted ? 'completed' : hasBothSigs ? 'current' : 'future',
@@ -201,8 +213,7 @@ function buildTimeline(bd: BackendDeal, status: DealStatus): DealTimeline[] {
     details: isPosted ? `Post ID: ${bd.postId}` : undefined,
   });
 
-  // Released / Refunded
-  const isFinal = status === 'RELEASED' || status === 'REFUNDED';
+  // 6. Released / Refunded
   steps.push({
     step: status === 'REFUNDED' ? 'Funds Refunded' : 'Funds Released',
     status: isFinal ? 'completed' : 'future',
