@@ -46,23 +46,41 @@ export class ChannelsService {
       }
       throw e;
     }
-    const botId = await this.telegram.getBotId();
     let isAdmin: boolean;
-    try {
-      isAdmin = await this.telegram.isBotAdmin(chat.id, botId);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('member list is inaccessible') || msg.includes('getChatMember failed')) {
-        throw new BadRequestException(
+    const useSession =
+      this.gramjs.isReady() &&
+      this.gramjs.isUserSession() &&
+      !!chat.username;
+
+    if (useSession) {
+      try {
+        isAdmin = await this.gramjs.isSessionUserChannelAdmin(chat.username);
+      } catch {
+        isAdmin = false;
+      }
+      if (!isAdmin) {
+        throw new ForbiddenException(
+          'Add our verification account as an administrator to the channel, then try again.',
+        );
+      }
+    } else {
+      const botId = await this.telegram.getBotId();
+      try {
+        isAdmin = await this.telegram.isBotAdmin(chat.id, botId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes('member list is inaccessible') || msg.includes('getChatMember failed')) {
+          throw new BadRequestException(
+            'Add the bot to the channel as an administrator, then try again.',
+          );
+        }
+        throw e;
+      }
+      if (!isAdmin) {
+        throw new ForbiddenException(
           'Add the bot to the channel as an administrator, then try again.',
         );
       }
-      throw e;
-    }
-    if (!isAdmin) {
-      throw new ForbiddenException(
-        'Add the bot to the channel as an administrator, then try again.',
-      );
     }
     const id = BigInt(chat.id);
     const existing = await this.prisma.channel.findUnique({
