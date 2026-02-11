@@ -96,20 +96,23 @@ model Notification {
 }
 
 model Channel {
-  id             BigInt    @id
-  ownerId        BigInt    @map("owner_id")
-  username       String?
-  title          String?
-  category       String?
-  subscribers    Int?
-  avgViews       Int?      @map("avg_views")
-  postsPerWeek   Int?      @map("posts_per_week")
-  pricing        Json?     @default("[]")
-  isVerified     Boolean   @default(false) @map("is_verified")
-  isActive       Boolean   @default(true) @map("is_active")
-  statsUpdatedAt DateTime? @map("stats_updated_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                    BigInt    @id
+  ownerId               BigInt    @map("owner_id")
+  username              String?
+  title                 String?
+  category              String?
+  subscribers           Int?
+  avgViews              Int?      @map("avg_views")
+  postsPerWeek          Int?      @map("posts_per_week")
+  pricing               Json?     @default("[]")
+  isVerified            Boolean   @default(false) @map("is_verified")
+  isActive              Boolean   @default(true) @map("is_active")
+  statsUpdatedAt        DateTime? @map("stats_updated_at")
+  languageDistribution  Json?     @map("language_distribution") // {language: percentage}
+  topPostsViews         Json?     @map("top_posts_views")       // array of view counts
+  engagementRate        Float?    @map("engagement_rate")       // avg engagement %
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
