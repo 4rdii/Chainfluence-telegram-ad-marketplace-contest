@@ -353,9 +353,17 @@ export const api = {
     getById: (id: string) =>
       apiFetch<BackendChannel>(`/channels/${id}`, { isPublic: true }),
 
-    /** Fetch channel stats from GramJS (subscribers only for now). Persists to DB. Public channels only. */
+    /** Fetch channel stats from GramJS. Persists to DB. Public channels only. */
     getStats: (id: string) =>
-      apiFetch<{ channelId: string; username: string; subscriberCount: number }>(`/channels/${id}/stats`, { isPublic: true }),
+      apiFetch<{
+        channelId: string;
+        username: string;
+        subscriberCount: number;
+        avgViews: number | null;
+        engagementRate: number | null;
+        languageDistribution: Record<string, number> | null;
+        topPostsViews: number[] | null;
+      }>(`/channels/${id}/stats`, { isPublic: true }),
 
     /** Resolve username to channelId via Telegram API. Call before create when you only have username. */
     resolve: (username: string) =>
