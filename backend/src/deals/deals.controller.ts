@@ -14,6 +14,14 @@ export class DealsController {
     return this.dealsService.register(userId, dto);
   }
 
+  @Post(':dealId/reject')
+  reject(
+    @CurrentUserId() userId: number,
+    @Param('dealId', ParseIntPipe) dealId: number,
+  ) {
+    return this.dealsService.rejectDeal(dealId, userId);
+  }
+
   @Get()
   findAll(@CurrentUserId() userId: number) {
     return this.dealsService.findAll(userId);
