@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsInt, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class RegisterDealDto {
   @IsInt()
@@ -47,4 +47,15 @@ export class RegisterDealDto {
   @IsOptional()
   @IsString()
   advertiserWallet?: string;
+
+  // ── Creative data ──
+
+  @IsOptional()
+  @IsString()
+  creativeText?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  creativeImages?: string[];
 }

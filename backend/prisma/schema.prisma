@@ -54,6 +54,10 @@ model Deal {
   advertiserSignTimestamp Int?  @map("advertiser_sign_timestamp")
   advertiserSignDomain   String? @map("advertiser_sign_domain")
 
+  // ── Creative data ──
+  creativeText       String?   @map("creative_text")
+  creativeImages     Json?     @default("[]") @map("creative_images")
+
   releasedAt         DateTime? @map("released_at")
   refundedAt         DateTime? @map("refunded_at")
   txHash             String?   @map("tx_hash")

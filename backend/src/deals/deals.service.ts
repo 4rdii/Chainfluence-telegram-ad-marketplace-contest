@@ -26,6 +26,8 @@ export class DealsService {
         contentHash: dto.contentHash ?? null,
         publisherWallet: dto.publisherWallet ?? null,
         advertiserWallet: dto.advertiserWallet ?? null,
+        creativeText: dto.creativeText ?? null,
+        creativeImages: dto.creativeImages ?? [],
         status: 'active',
       },
     });
@@ -187,6 +189,8 @@ export class DealsService {
       releasedAt: deal.releasedAt?.toISOString() ?? null,
       refundedAt: deal.refundedAt?.toISOString() ?? null,
       txHash: deal.txHash,
+      creativeText: deal.creativeText ?? null,
+      creativeImages: Array.isArray(deal.creativeImages) ? deal.creativeImages : [],
       createdAt: deal.createdAt.toISOString(),
       updatedAt: deal.updatedAt.toISOString(),
     };
