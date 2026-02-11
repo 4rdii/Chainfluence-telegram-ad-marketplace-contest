@@ -111,6 +111,10 @@ model Channel {
   languageDistribution  Json?     @map("language_distribution") // {language: percentage}
   topPostsViews         Json?     @map("top_posts_views")       // array of view counts
   engagementRate        Float?    @map("engagement_rate")       // avg engagement %
+  avgReach              Int?      @map("avg_reach")             // viewsPerPost.current
+  sharesPerPost         Int?      @map("shares_per_post")       // sharesPerPost.current
+  reactionsPerPost      Int?      @map("reactions_per_post")    // reactionsPerPost.current
+  notificationsEnabled  Float?    @map("notifications_enabled") // enabledNotifications percentage
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 

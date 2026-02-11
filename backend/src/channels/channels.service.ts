@@ -131,24 +131,35 @@ export class ChannelsService {
 
     // Fetch extended stats if GramJS user session is available and channel has username
     let avgViews: number | null = null;
+    let postsPerWeek: number | null = null;
     let languageDistribution: Record<string, number> | null = null;
     let engagementRate: number | null = null;
     let topPostsViews: number[] | null = null;
+    let avgReach: number | null = null;
+    let sharesPerPost: number | null = null;
+    let reactionsPerPost: number | null = null;
+    let notificationsEnabled: number | null = null;
 
     if (this.gramjs.isReady() && this.gramjs.isUserSession() && chat.username) {
       this.logger.log(`create: fetching extended stats for @${chat.username}`, LOG_CTX);
 
-      // Get average views from recent posts
-      avgViews = await this.gramjs.getChannelAverageViews(chat.username);
-      this.logger.log(`create: avgViews=${avgViews}`, LOG_CTX);
+      // One GetHistory call for avgViews + postsPerWeek
+      const historyStats = await this.gramjs.getChannelHistoryStats(chat.username);
+      avgViews = historyStats.avgViews;
+      postsPerWeek = historyStats.postsPerWeek;
+      this.logger.log(`create: avgViews=${avgViews} postsPerWeek=${postsPerWeek}`, LOG_CTX);
 
-      // Get broadcast stats (language, engagement, etc.)
+      // Get broadcast stats (language, engagement, reach, etc.)
       const broadcastStats = await this.gramjs.getChannelBroadcastStats(chat.username);
       languageDistribution = broadcastStats.languageDistribution;
       engagementRate = broadcastStats.engagementRate;
       topPostsViews = broadcastStats.topPostsViews;
+      avgReach = broadcastStats.avgReach;
+      sharesPerPost = broadcastStats.sharesPerPost;
+      reactionsPerPost = broadcastStats.reactionsPerPost;
+      notificationsEnabled = broadcastStats.notificationsEnabled;
       this.logger.log(
-        `create: broadcastStats languageDistribution=${!!languageDistribution} engagementRate=${engagementRate} topPostsViews=${topPostsViews?.length ?? 0}`,
+        `create: broadcastStats languageDistribution=${!!languageDistribution} engagementRate=${engagementRate} topPostsViews=${topPostsViews?.length ?? 0} avgReach=${avgReach} sharesPerPost=${sharesPerPost} reactionsPerPost=${reactionsPerPost} notificationsEnabled=${notificationsEnabled?.toFixed(1) ?? 'null'}%`,
         LOG_CTX,
       );
     }
@@ -162,9 +173,14 @@ export class ChannelsService {
         isVerified: true,
         statsUpdatedAt: new Date(),
         avgViews,
+        postsPerWeek,
         languageDistribution: languageDistribution as any,
         engagementRate,
         topPostsViews: topPostsViews as any,
+        avgReach,
+        sharesPerPost,
+        reactionsPerPost,
+        notificationsEnabled,
       },
     });
     this.logger.log(`create: created channel id=${id} username=${channel.username}`, LOG_CTX);
@@ -262,16 +278,27 @@ export class ChannelsService {
 
     // Get extended stats if user session is available
     let avgViews: number | null = null;
+    let postsPerWeek: number | null = null;
     let languageDistribution: Record<string, number> | null = null;
     let engagementRate: number | null = null;
     let topPostsViews: number[] | null = null;
+    let avgReach: number | null = null;
+    let sharesPerPost: number | null = null;
+    let reactionsPerPost: number | null = null;
+    let notificationsEnabled: number | null = null;
 
     if (this.gramjs.isUserSession()) {
-      avgViews = await this.gramjs.getChannelAverageViews(channel.username);
+      const historyStats = await this.gramjs.getChannelHistoryStats(channel.username);
+      avgViews = historyStats.avgViews;
+      postsPerWeek = historyStats.postsPerWeek;
       const broadcastStats = await this.gramjs.getChannelBroadcastStats(channel.username);
       languageDistribution = broadcastStats.languageDistribution;
       engagementRate = broadcastStats.engagementRate;
       topPostsViews = broadcastStats.topPostsViews;
+      avgReach = broadcastStats.avgReach;
+      sharesPerPost = broadcastStats.sharesPerPost;
+      reactionsPerPost = broadcastStats.reactionsPerPost;
+      notificationsEnabled = broadcastStats.notificationsEnabled;
     }
 
     await this.prisma.channel.update({
@@ -280,9 +307,14 @@ export class ChannelsService {
         subscribers: stats.subscriberCount,
         statsUpdatedAt: new Date(),
         ...(avgViews !== null && { avgViews }),
+        ...(postsPerWeek !== null && { postsPerWeek }),
         ...(languageDistribution && { languageDistribution: languageDistribution as any }),
         ...(engagementRate !== null && { engagementRate }),
         ...(topPostsViews && { topPostsViews: topPostsViews as any }),
+        ...(avgReach !== null && { avgReach }),
+        ...(sharesPerPost !== null && { sharesPerPost }),
+        ...(reactionsPerPost !== null && { reactionsPerPost }),
+        ...(notificationsEnabled !== null && { notificationsEnabled }),
       },
     });
 
@@ -291,9 +323,14 @@ export class ChannelsService {
       username: channel.username,
       subscriberCount: stats.subscriberCount,
       avgViews,
+      postsPerWeek,
       languageDistribution,
       engagementRate,
       topPostsViews,
+      avgReach,
+      sharesPerPost,
+      reactionsPerPost,
+      notificationsEnabled,
     };
   }
 
@@ -313,6 +350,10 @@ export class ChannelsService {
     languageDistribution: any;
     topPostsViews: any;
     engagementRate: number | null;
+    avgReach: number | null;
+    sharesPerPost: number | null;
+    reactionsPerPost: number | null;
+    notificationsEnabled: number | null;
     createdAt: Date;
     updatedAt: Date;
   }) {
@@ -332,6 +373,10 @@ export class ChannelsService {
       languageDistribution: channel.languageDistribution,
       topPostsViews: channel.topPostsViews,
       engagementRate: channel.engagementRate,
+      avgReach: channel.avgReach,
+      sharesPerPost: channel.sharesPerPost,
+      reactionsPerPost: channel.reactionsPerPost,
+      notificationsEnabled: channel.notificationsEnabled,
       createdAt: channel.createdAt.toISOString(),
       updatedAt: channel.updatedAt.toISOString(),
     };
