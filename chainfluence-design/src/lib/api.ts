@@ -435,6 +435,10 @@ export const api = {
 
     getById: (dealId: number) => apiFetch<BackendDeal>(`/deals/${dealId}`),
 
+    /** Reject a deal (channel owner). Sets status to 'rejected', triggers refund. */
+    reject: (dealId: number) =>
+      apiFetch<BackendDeal>(`/deals/${dealId}/reject`, { method: 'POST' }),
+
     register: (data: {
       dealId: number;
       verificationChatId: number;

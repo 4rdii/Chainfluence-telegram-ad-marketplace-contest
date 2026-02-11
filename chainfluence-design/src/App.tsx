@@ -522,19 +522,27 @@ export default function App() {
    * Helper: build deal params for TonConnect signing from a backend deal.
    * postId and postedAt are NOT included — they aren't part of the signed cell.
    */
-  const buildSignableParams = (bd: {
-    dealId: number;
-    channelId: string | null;
-    contentHash: string | null;
-    duration: number | null;
-    publisherWallet: string | null;
-    advertiserWallet: string | null;
-    amount: string | null;
-  }): DealParamsForSigning => {
+  const buildSignableParams = (
+    bd: {
+      dealId: number;
+      channelId: string | null;
+      contentHash: string | null;
+      duration: number | null;
+      publisherWallet: string | null;
+      advertiserWallet: string | null;
+      amount: string | null;
+    },
+    /** Override: use the current user's connected wallet for the signing role */
+    walletOverride?: { role: 'publisher' | 'advertiser'; address: string },
+  ): DealParamsForSigning => {
     if (!bd.amount || !bd.contentHash || !bd.channelId) {
       throw new Error('Deal is missing required fields (amount, contentHash, or channelId)');
     }
-    if (!bd.publisherWallet || !bd.advertiserWallet) {
+
+    const publisherAddr = walletOverride?.role === 'publisher' ? walletOverride.address : bd.publisherWallet;
+    const advertiserAddr = walletOverride?.role === 'advertiser' ? walletOverride.address : bd.advertiserWallet;
+
+    if (!publisherAddr || !advertiserAddr) {
       throw new Error('Deal is missing wallet addresses. Both parties must connect their wallets.');
     }
 
@@ -543,8 +551,8 @@ export default function App() {
       channelId: parseInt(bd.channelId, 10),
       contentHash: bd.contentHash,
       duration: bd.duration ?? 86400,
-      publisher: bd.publisherWallet,
-      advertiser: bd.advertiserWallet,
+      publisher: publisherAddr,
+      advertiser: advertiserAddr,
       amount: bd.amount,
     };
   };
@@ -564,7 +572,7 @@ export default function App() {
       dealId,
       role,
       signature: signResult.signature,
-      publicKey: signResult.publicKey,
+      publicKey: signResult.publicKey || tonWallet?.account?.publicKey || '',
       walletAddress: tonWallet?.account?.address ?? '',
       timestamp: signResult.timestamp,
       domain: signResult.domain,
@@ -573,23 +581,68 @@ export default function App() {
 
   /**
    * Called after the advertiser's deposit TX has been submitted.
-   *
-   * Since postId/postedAt are NOT part of the signed cell, the
-   * advertiser can sign immediately after depositing.
+   * In the new flow, the advertiser does NOT sign here — they sign later
+   * via the Approve button after the channel owner has approved.
    */
   const handlePaymentSent = async (dealId: number) => {
-    console.log(`Payment sent for dealId=${dealId}. Prompting advertiser to sign…`);
-
-    try {
-      const backendDeal = await api.deals.getById(dealId);
-      const dealParams = buildSignableParams(backendDeal);
-      await signAndSubmitDeal(dealId, 'advertiser', dealParams);
-      console.log(`Advertiser signature submitted for dealId=${dealId}`);
-    } catch (error) {
-      console.error('Failed to sign deal as advertiser:', error);
-    }
-
+    dlog.info(`Payment sent for dealId=${dealId}. Deal registered, awaiting channel owner approval.`);
     await loadDeals();
+  };
+
+  /**
+   * Channel owner approves the deal — prompts their wallet to sign.
+   */
+  const handleApproveDeal = async (deal: Deal) => {
+    const dealId = parseInt(deal.id, 10);
+    const myWallet = tonWallet?.account?.address;
+    if (!myWallet) throw new Error('Please connect your TON wallet first');
+    dlog.info(`Channel owner approving deal ${dealId}...`);
+
+    const backendDeal = await api.deals.getById(dealId);
+    const dealParams = buildSignableParams(backendDeal, { role: 'publisher', address: myWallet });
+    await signAndSubmitDeal(dealId, 'publisher', dealParams);
+
+    dlog.info(`Publisher signature submitted for dealId=${dealId}`);
+    await loadDeals();
+    // Navigate to refreshed deal
+    const updatedDeals = await api.deals.list();
+    const updated = updatedDeals.find(d => d.dealId === dealId);
+    if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
+  };
+
+  /**
+   * Channel owner rejects the deal — triggers refund.
+   */
+  const handleRejectDeal = async (deal: Deal) => {
+    const dealId = parseInt(deal.id, 10);
+    dlog.info(`Channel owner rejecting deal ${dealId}...`);
+
+    await api.deals.reject(dealId);
+
+    dlog.info(`Deal ${dealId} rejected`);
+    await loadDeals();
+    setScreen({ type: 'tab', tab: 'deals' });
+  };
+
+  /**
+   * Advertiser approves the deal — prompts their wallet to sign.
+   */
+  const handleAdvertiserApprove = async (deal: Deal) => {
+    const dealId = parseInt(deal.id, 10);
+    const myWallet = tonWallet?.account?.address;
+    if (!myWallet) throw new Error('Please connect your TON wallet first');
+    dlog.info(`Advertiser approving deal ${dealId}...`);
+
+    const backendDeal = await api.deals.getById(dealId);
+    const dealParams = buildSignableParams(backendDeal, { role: 'advertiser', address: myWallet });
+    await signAndSubmitDeal(dealId, 'advertiser', dealParams);
+
+    dlog.info(`Advertiser signature submitted for dealId=${dealId}`);
+    await loadDeals();
+    // Navigate to refreshed deal
+    const updatedDeals = await api.deals.list();
+    const updated = updatedDeals.find(d => d.dealId === dealId);
+    if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
   };
 
   /**
@@ -746,6 +799,9 @@ export default function App() {
             channel={channels.find(c => c.id === screen.deal.channelId)!}
             user={user}
             onBack={() => handleBackToTab('deals')}
+            onApproveDeal={handleApproveDeal}
+            onRejectDeal={handleRejectDeal}
+            onAdvertiserApprove={handleAdvertiserApprove}
             onConfirmPosted={handleConfirmPosted}
           />
         )}
