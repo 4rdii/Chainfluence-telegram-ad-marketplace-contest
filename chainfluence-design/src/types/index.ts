@@ -31,6 +31,7 @@ export interface ChannelStats {
   postsPerWeek: number | null;
   audienceByCountry: { country: string; percentage: number }[];
   growth: number | null;
+  languageDistribution?: Record<string, number> | null;
 }
 
 export interface Channel {

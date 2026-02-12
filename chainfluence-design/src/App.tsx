@@ -94,11 +94,14 @@ export default function App() {
           const r = results[i];
           if (r.status === 'fulfilled' && r.value) {
             const s = r.value;
+            dlog.info(`Stats for channel ${ch.id}: engagement=${s.engagementRate}, langs=${JSON.stringify(s.languageDistribution)}`);
             return {
               ...ch,
               stats: {
                 ...ch.stats,
                 subscribers: s.subscriberCount,
+                engagement: s.engagementRate ?? ch.stats.engagement,
+                languageDistribution: s.languageDistribution ?? undefined,
               },
             };
           }
@@ -863,7 +866,7 @@ export default function App() {
         {/* Detail screens */}
         {screen.type === 'channelDetail' && (
           <ChannelDetailScreen
-            channel={screen.channel}
+            channel={channels.find((c: Channel) => c.id === screen.channel.id) || screen.channel}
             onBack={() => handleBackToTab('channels')}
             onBookAdSlot={handleBookAdSlot}
           />
