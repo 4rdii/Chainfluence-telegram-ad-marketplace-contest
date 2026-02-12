@@ -1,10 +1,8 @@
 import { Deal, Channel, User } from '../../types';
-import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, RefreshCw, XCircle, Send } from 'lucide-react';
 import { StatusBadge } from '../StatusBadge';
 import { FormatBadge } from '../FormatBadge';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
 import { useState } from 'react';
 
 interface DealDetailScreenProps {
@@ -18,19 +16,17 @@ interface DealDetailScreenProps {
   onRejectDeal?: (deal: Deal) => Promise<void>;
   /** Advertiser approves the deal (prompts wallet to sign) */
   onAdvertiserApprove?: (deal: Deal) => Promise<void>;
-  /** Publisher signs & posts the ad to channel, then confirms with post link */
-  onConfirmPosted?: (deal: Deal, postLink: string) => Promise<void>;
+  /** Refresh deal status from backend */
+  onRefresh?: () => Promise<void>;
 }
 
 export function DealDetailScreen({
   deal, channel, user, onBack,
-  onApproveDeal, onRejectDeal, onAdvertiserApprove, onConfirmPosted,
+  onApproveDeal, onRejectDeal, onAdvertiserApprove, onRefresh,
 }: DealDetailScreenProps) {
-  const [postLink, setPostLink] = useState('');
-  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
-  const [postSubmitError, setPostSubmitError] = useState('');
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const isPublisher = deal.publisherId === user.id;
@@ -103,20 +99,9 @@ export function DealDetailScreen({
     }
   };
 
-  const handleConfirmPosted = async () => {
-    if (!postLink || !onConfirmPosted) return;
-    setIsSubmittingPost(true);
-    setPostSubmitError('');
-    try {
-      await onConfirmPosted(deal, postLink);
-    } catch (error) {
-      setPostSubmitError(
-        error instanceof Error ? error.message : 'Verification failed. Please try again.',
-      );
-    } finally {
-      setIsSubmittingPost(false);
-    }
-  };
+  const isPosted = deal.timeline.some(
+    s => s.step === 'Ad Posted' && s.status === 'completed'
+  );
 
   return (
     <div className="pb-20">
@@ -134,6 +119,18 @@ export function DealDetailScreen({
             <h1 className="text-xl font-semibold mb-1">Deal #{deal.id}</h1>
             <StatusBadge status={deal.status} />
           </div>
+          {onRefresh && (
+            <button
+              onClick={async () => {
+                setIsRefreshing(true);
+                try { await onRefresh(); } finally { setIsRefreshing(false); }
+              }}
+              disabled={isRefreshing}
+              className="p-2 rounded-lg hover:bg-accent transition-colors"
+            >
+              <RefreshCw className={`w-5 h-5 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -359,60 +356,28 @@ export function DealDetailScreen({
         </div>
       )}
 
-      {/* 5. Channel Owner: Sign & Post (after both signatures collected, before posting) */}
-      {isPublisher && hasBothSigs && !deal.postId && deal.status !== 'REFUNDED' && (
-        <div className="p-4">
-          <h2 className="font-semibold mb-3">Post the Ad</h2>
-          <div className="space-y-4">
+      {/* 5. Both signatures collected — auto-posting to channel */}
+      {hasBothSigs && !isPosted && deal.status !== 'REFUNDED' && (
+        <div className="p-4 border-b border-border">
+          <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg text-center">
+            <Send className="w-8 h-8 text-primary mx-auto mb-2" />
+            <p className="font-medium mb-1">Both Parties Approved</p>
             <p className="text-sm text-muted-foreground">
-              Both parties have signed. Post the ad creative to your channel and confirm below.
+              Posting the ad to the channel...
             </p>
-            <div>
-              <Label htmlFor="postLink">Message ID or Post Link</Label>
-              <Input
-                id="postLink"
-                value={postLink}
-                onChange={(e) => setPostLink(e.target.value)}
-                placeholder="https://t.me/channel/1234 or message ID"
-                className="mt-1"
-              />
-            </div>
-            {postSubmitError && (
-              <p className="text-sm text-[var(--error-red)]">{postSubmitError}</p>
-            )}
-            <Button
-              onClick={handleConfirmPosted}
-              className="w-full bg-primary text-primary-foreground"
-              disabled={!postLink || isSubmittingPost}
-            >
-              {isSubmittingPost ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Verifying post...
-                </span>
-              ) : (
-                "Confirm Ad Posted"
-              )}
-            </Button>
           </div>
         </div>
       )}
 
-      {/* 6. Posted - Waiting for release */}
-      {deal.status === 'POSTED' && (
+      {/* 6. Ad posted — waiting for release */}
+      {isPosted && deal.status !== 'RELEASED' && deal.status !== 'REFUNDED' && (
         <div className="p-4">
-          <h2 className="font-semibold mb-3">Ad is Live</h2>
           <div className="bg-card border border-border rounded-lg p-4">
-            {deal.postId && (
-              <div className="mb-3">
-                <p className="text-xs text-muted-foreground mb-1">Post ID</p>
-                <p className="text-sm font-mono">{deal.postId}</p>
-              </div>
-            )}
             <div className="p-3 bg-[var(--success-green)]/10 rounded-lg text-center">
               <CheckCircle2 className="w-8 h-8 text-[var(--success-green)] mx-auto mb-2" />
+              <p className="font-medium mb-1">Ad is Live</p>
               <p className="text-sm text-muted-foreground">
-                Ad has been posted. Awaiting TEE verification and fund release.
+                Ad has been posted to the channel. Awaiting TEE verification and fund release.
               </p>
             </div>
           </div>

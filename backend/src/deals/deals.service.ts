@@ -1,10 +1,16 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GramJsService } from '../telegram/gramjs.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { RegisterDealDto } from './dto/register-deal.dto';
 
 @Injectable()
 export class DealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gramJs: GramJsService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   async register(userId: number, dto: RegisterDealDto) {
     const existing = await this.prisma.deal.findUnique({
@@ -189,6 +195,93 @@ export class DealsService {
     return this.prisma.deal.findMany({
       where: { status: 'active' },
     });
+  }
+
+  /**
+   * Post the deal's creative content to the channel using GramJS.
+   * Only the publisher (channel owner) can call this.
+   */
+  async postCreative(dealId: number, userId: number) {
+    const userIdBig = BigInt(userId);
+    
+    // Fetch deal
+    const deal = await this.prisma.deal.findUnique({
+      where: { dealId },
+    });
+
+    if (!deal) {
+      throw new NotFoundException('Deal not found');
+    }
+
+    // Verify caller is the publisher
+    if (deal.publisherId !== userIdBig) {
+      throw new ForbiddenException('Only the publisher can post the creative');
+    }
+
+    // Check if channel exists
+    if (!deal.channelId) {
+      throw new BadRequestException('Deal has no associated channel');
+    }
+
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: deal.channelId },
+    });
+
+    if (!channel || !channel.username) {
+      throw new BadRequestException('Channel not found or has no username');
+    }
+
+    // Verify GramJS is ready
+    if (!this.gramJs.isReady()) {
+      throw new BadRequestException('Telegram client not ready. Check TELEGRAM_API_ID/TELEGRAM_API_HASH configuration.');
+    }
+
+    // Get creative content
+    const text = deal.creativeText ?? '';
+    const fileIds = Array.isArray(deal.creativeImages) ? deal.creativeImages as string[] : [];
+
+    // Download image buffers from file_ids
+    const photoBuffers: Buffer[] = [];
+    for (const fileId of fileIds) {
+      try {
+        const { buffer } = await this.uploads.proxyFile(fileId);
+        photoBuffers.push(buffer);
+      } catch (err) {
+        throw new BadRequestException(
+          `Failed to fetch image ${fileId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // Post to channel
+    try {
+      const { messageId } = await this.gramJs.postToChannel(
+        channel.username,
+        text,
+        photoBuffers.length > 0 ? photoBuffers : undefined,
+      );
+
+      // Update deal with post info
+      const now = Math.floor(Date.now() / 1000);
+      const updated = await this.prisma.deal.update({
+        where: { dealId },
+        data: {
+          postId: messageId,
+          postedAt: now,
+        },
+      });
+
+      return {
+        success: true,
+        messageId,
+        channelUsername: channel.username,
+        deal: this.toResponse(updated),
+      };
+    } catch (err) {
+      throw new BadRequestException(
+        `Failed to post to channel: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

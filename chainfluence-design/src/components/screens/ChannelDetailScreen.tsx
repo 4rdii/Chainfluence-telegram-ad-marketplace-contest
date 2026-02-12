@@ -6,7 +6,7 @@ import { formatStat, formatPercent } from '../../lib/format-stat';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { ArrowLeft, ExternalLink, Users, Eye, Calendar, MapPin, Star, TrendingUp, Upload, Loader2, X } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Users, Eye, Calendar, MapPin, Star, TrendingUp, Upload, Loader2, X, Globe } from 'lucide-react';
 import { api } from '../../lib/api';
 
 export interface BookingData {
@@ -174,6 +174,41 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
             </div>
           </div>
         )}
+
+        {/* Language Distribution */}
+        {channel.stats.languageDistribution && Object.keys(channel.stats.languageDistribution).length > 0 && (() => {
+          const langs = Object.entries(channel.stats.languageDistribution!)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 8);
+          const total = langs.reduce((sum, [, v]) => sum + v, 0);
+          return (
+            <div className="bg-card border border-border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Globe className="w-4 h-4 text-primary" />
+                <h3 className="font-medium">Language Distribution</h3>
+              </div>
+              <div className="space-y-2">
+                {langs.map(([lang, count]) => {
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  return (
+                    <div key={lang}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>{lang}</span>
+                        <span className="text-muted-foreground">{pct}%</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div
+                          className="bg-primary rounded-full h-2 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Creative & Content Section */}

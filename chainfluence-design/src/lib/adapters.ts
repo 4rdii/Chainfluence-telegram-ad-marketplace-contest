@@ -205,12 +205,16 @@ function buildTimeline(bd: BackendDeal, status: DealStatus): DealTimeline[] {
         : undefined,
   });
 
-  // 5. Ad Posted
+  // 5. Ad Posted (auto-posted by backend)
   steps.push({
     step: 'Ad Posted',
     status: isPosted ? 'completed' : hasBothSigs ? 'current' : 'future',
     timestamp: bd.postedAt ? new Date(bd.postedAt * 1000).toISOString() : undefined,
-    details: isPosted ? `Post ID: ${bd.postId}` : undefined,
+    details: isPosted
+      ? `Post ID: ${bd.postId}`
+      : hasBothSigs
+        ? 'Posting to channel...'
+        : undefined,
   });
 
   // 6. Released / Refunded

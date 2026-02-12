@@ -9,5 +9,5 @@ export function formatStat(value: number | null | undefined): string {
 /** Format a percentage stat – "n/a" when unavailable. */
 export function formatPercent(value: number | null | undefined): string {
   if (value == null) return 'n/a';
-  return `${value}%`;
+  return `${Math.round(value * 10) / 10}%`;
 }

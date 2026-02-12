@@ -24,7 +24,7 @@ import {
   mockNotifications,
   mockOffers
 } from './lib/mock-data';
-import { Channel, Campaign, Deal, UserRole, User } from './types';
+import { Channel, Campaign, Deal, Offer, UserRole, User } from './types';
 import { getTelegramUser, initTelegramWebApp, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
 import { api } from './lib/api';
 import { authenticateWithTelegram } from './lib/auth';
@@ -76,6 +76,7 @@ export default function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [offers, setOffers] = useState(mockOffers);
+  const [campaignOffers, setCampaignOffers] = useState<Offer[]>([]);
 
   // ── Data loaders ──
 
@@ -93,11 +94,14 @@ export default function App() {
           const r = results[i];
           if (r.status === 'fulfilled' && r.value) {
             const s = r.value;
+            dlog.info(`Stats for channel ${ch.id}: engagement=${s.engagementRate}, langs=${JSON.stringify(s.languageDistribution)}`);
             return {
               ...ch,
               stats: {
                 ...ch.stats,
                 subscribers: s.subscriberCount,
+                engagement: s.engagementRate ?? ch.stats.engagement,
+                languageDistribution: s.languageDistribution ?? undefined,
               },
             };
           }
@@ -138,6 +142,14 @@ export default function App() {
       dlog.info(`Loaded ${data.length} offers`);
       if (data.length > 0) setOffers(data.map(adaptOffer));
     } catch (e) { dlog.warn('loadOffers failed:', e); }
+  }, []);
+
+  const loadCampaignOffers = useCallback(async (campaignId: number) => {
+    try {
+      const data = await api.campaigns.getOffers(campaignId);
+      dlog.info(`Loaded ${data.length} offers for campaign ${campaignId}`);
+      setCampaignOffers(data.map(adaptOffer));
+    } catch (e) { dlog.warn('loadCampaignOffers failed:', e); }
   }, []);
 
   // ── Boot sequence ──
@@ -258,6 +270,12 @@ export default function App() {
 
   const handleCampaignClick = (campaign: Campaign) => {
     setScreen({ type: 'campaignDetail', campaign });
+    // Auto-load offers if this is the user's own campaign
+    if (campaign.advertiserId === user.id) {
+      loadCampaignOffers(parseInt(campaign.id));
+    } else {
+      setCampaignOffers([]);
+    }
   };
 
   const handleDealClick = (deal: Deal) => {
@@ -516,6 +534,89 @@ export default function App() {
     }
   };
 
+  /**
+   * Advertiser accepts an offer on their campaign.
+   * Mirrors handleBookAdSlot: accept offer → create escrow → register deal → payment.
+   */
+  const handleAcceptOffer = async (offer: Offer) => {
+    // 1. Accept the offer on the backend
+    await api.offers.accept(parseInt(offer.id));
+    dlog.info(`Offer ${offer.id} accepted`);
+
+    // 2. Look up the campaign to get creative data
+    const campaign = campaigns.find((c: Campaign) => c.id === offer.campaignId);
+    if (!campaign) throw new Error('Campaign not found');
+
+    // 3. Generate a deal ID
+    const dealId = Date.now() % 1_000_000;
+
+    // 4. Create escrow wallet
+    const { address } = await api.escrow.createWallet(dealId);
+
+    // 5. Compute content hash from campaign creative
+    const contentHashStr = await computeContentHash(campaign.creativeText || '');
+
+    // 6. Map format → duration
+    const formatDurations: Record<string, number> = {
+      '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
+    };
+    const duration = formatDurations[offer.format] || 86400;
+
+    // 7. Calculate amount in nanoTON (offer price + 5% fee)
+    const fee = offer.price * 0.05;
+    const totalAmount = offer.price + fee;
+    const amountNano = Math.floor(totalAmount * 1_000_000_000).toString();
+
+    // 8. Get advertiser's wallet address
+    const advertiserWallet = tonWallet?.account?.address || undefined;
+
+    // 9. Register the deal
+    await api.deals.register({
+      dealId,
+      verificationChatId: parseInt(offer.channelId, 10),
+      publisherId: parseInt(offer.publisherId, 10),
+      advertiserId: parseInt(user.id, 10),
+      channelId: parseInt(offer.channelId, 10),
+      escrowAddress: address,
+      amount: amountNano,
+      duration,
+      contentHash: contentHashStr,
+      advertiserWallet,
+      creativeText: campaign.creativeText || undefined,
+      // Extract raw file IDs from adapted URLs (adaptCampaign already wrapped them)
+      creativeImages: campaign.creativeImages.length > 0
+        ? campaign.creativeImages.map((url: string) => {
+            const parts = url.split('/uploads/');
+            return parts.length > 1 ? decodeURIComponent(parts[parts.length - 1]) : url;
+          })
+        : undefined,
+    });
+
+    dlog.info('Deal registered from accepted offer, navigating to payment', { dealId, totalAmount, address });
+
+    // 10. Navigate to payment
+    const channel = channels.find((c: Channel) => c.id === offer.channelId);
+    setScreen({
+      type: 'payment',
+      dealId,
+      amount: totalAmount,
+      escrowAddress: address,
+      dealLabel: `${campaign.title} - ${channel?.name || offer.channelId}`,
+    });
+  };
+
+  /**
+   * Advertiser rejects an offer on their campaign.
+   */
+  const handleRejectOffer = async (offerId: string) => {
+    await api.offers.reject(parseInt(offerId));
+    dlog.info(`Offer ${offerId} rejected`);
+    // Reload campaign offers if we're on campaign detail
+    if (screen.type === 'campaignDetail') {
+      await loadCampaignOffers(parseInt(screen.campaign.id));
+    }
+  };
+
   // ── Payment & Escrow flow ──
 
   /**
@@ -590,7 +691,20 @@ export default function App() {
   };
 
   /**
+   * After signing, if both parties have signed, auto-post creative to channel.
+   */
+  const autoPostIfReady = async (dealId: number, signResult: { deal: { publisherSigned: boolean; advertiserSigned: boolean; postId: number | null } }) => {
+    const d = signResult.deal;
+    if (d.publisherSigned && d.advertiserSigned && d.postId == null) {
+      dlog.info(`Both parties signed deal ${dealId}, auto-posting to channel...`);
+      const postResult = await api.deals.post(dealId);
+      dlog.info(`Deal ${dealId} posted to @${postResult.channelUsername}, messageId=${postResult.messageId}`);
+    }
+  };
+
+  /**
    * Channel owner approves the deal — prompts their wallet to sign.
+   * If both parties have now signed, auto-posts the creative to the channel.
    */
   const handleApproveDeal = async (deal: Deal) => {
     const dealId = parseInt(deal.id, 10);
@@ -600,11 +714,12 @@ export default function App() {
 
     const backendDeal = await api.deals.getById(dealId);
     const dealParams = buildSignableParams(backendDeal, { role: 'publisher', address: myWallet });
-    await signAndSubmitDeal(dealId, 'publisher', dealParams);
+    const result = await signAndSubmitDeal(dealId, 'publisher', dealParams);
 
     dlog.info(`Publisher signature submitted for dealId=${dealId}`);
+    await autoPostIfReady(dealId, result);
+
     await loadDeals();
-    // Navigate to refreshed deal
     const updatedDeals = await api.deals.list();
     const updated = updatedDeals.find(d => d.dealId === dealId);
     if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
@@ -626,6 +741,7 @@ export default function App() {
 
   /**
    * Advertiser approves the deal — prompts their wallet to sign.
+   * If both parties have now signed, auto-posts the creative to the channel.
    */
   const handleAdvertiserApprove = async (deal: Deal) => {
     const dealId = parseInt(deal.id, 10);
@@ -635,43 +751,15 @@ export default function App() {
 
     const backendDeal = await api.deals.getById(dealId);
     const dealParams = buildSignableParams(backendDeal, { role: 'advertiser', address: myWallet });
-    await signAndSubmitDeal(dealId, 'advertiser', dealParams);
+    const result = await signAndSubmitDeal(dealId, 'advertiser', dealParams);
 
     dlog.info(`Advertiser signature submitted for dealId=${dealId}`);
+    await autoPostIfReady(dealId, result);
+
     await loadDeals();
-    // Navigate to refreshed deal
     const updatedDeals = await api.deals.list();
     const updated = updatedDeals.find(d => d.dealId === dealId);
     if (updated) setScreen({ type: 'dealDetail', deal: adaptDeal(updated) });
-  };
-
-  /**
-   * Called when the publisher confirms they have posted the ad.
-   *
-   * The publisher should have already signed the deal (at deal acceptance).
-   * This just submits the post link. The backend sets postId/postedAt and
-   * auto-triggers TEE if both signatures are present.
-   *
-   * If the publisher hasn't signed yet, we prompt them to sign here too.
-   */
-  const handleConfirmPosted = async (deal: Deal, postLink: string) => {
-    const dealId = parseInt(deal.id, 10);
-
-    // Check if publisher has already signed; if not, sign now
-    const backendDeal = await api.deals.getById(dealId);
-    if (!backendDeal.publisherSigned) {
-      const dealParams = buildSignableParams(backendDeal);
-      await signAndSubmitDeal(dealId, 'publisher', dealParams);
-    }
-
-    // Submit post link → backend sets postId/postedAt + may trigger TEE
-    const result = await api.escrow.confirmPosted({ dealId, postLink });
-
-    if (result.teeResult && !result.teeResult.success) {
-      throw new Error(result.teeResult.error || 'TEE verification failed');
-    }
-
-    await loadDeals();
   };
 
   // ── Deal completion ──
@@ -778,7 +866,7 @@ export default function App() {
         {/* Detail screens */}
         {screen.type === 'channelDetail' && (
           <ChannelDetailScreen
-            channel={screen.channel}
+            channel={channels.find((c: Channel) => c.id === screen.channel.id) || screen.channel}
             onBack={() => handleBackToTab('channels')}
             onBookAdSlot={handleBookAdSlot}
           />
@@ -787,9 +875,15 @@ export default function App() {
         {screen.type === 'campaignDetail' && (
           <CampaignDetailScreen
             campaign={screen.campaign}
+            user={user}
             userChannels={userChannels}
+            channels={channels}
+            offers={campaignOffers}
+            myOffers={userOffers.filter((o: Offer) => o.campaignId === screen.campaign.id)}
             onBack={() => handleBackToTab('campaigns')}
             onSubmitOffer={handleSubmitOffer}
+            onAcceptOffer={handleAcceptOffer}
+            onRejectOffer={handleRejectOffer}
           />
         )}
 
@@ -802,7 +896,12 @@ export default function App() {
             onApproveDeal={handleApproveDeal}
             onRejectDeal={handleRejectDeal}
             onAdvertiserApprove={handleAdvertiserApprove}
-            onConfirmPosted={handleConfirmPosted}
+            onRefresh={async () => {
+              const dealId = parseInt(screen.deal.id, 10);
+              await loadDeals();
+              const fresh = await api.deals.getById(dealId);
+              setScreen({ type: 'dealDetail', deal: adaptDeal(fresh) });
+            }}
           />
         )}
 
@@ -861,11 +960,13 @@ export default function App() {
             offers={userOffers}
             campaigns={campaigns}
             channels={channels}
+            deals={deals}
             onBack={() => handleBackToTab('profile')}
             onOfferClick={(offer) => {
               const campaign = campaigns.find(c => c.id === offer.campaignId);
               if (campaign) setScreen({ type: 'campaignDetail', campaign });
             }}
+            onGoToDeal={handleDealClick}
           />
         )}
 

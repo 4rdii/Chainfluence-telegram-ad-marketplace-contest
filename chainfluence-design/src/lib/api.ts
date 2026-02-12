@@ -414,7 +414,7 @@ export const api = {
       apiFetch<BackendCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: data }),
 
     getOffers: (campaignId: number) =>
-      apiFetch<BackendOffer[]>(`/campaigns/${campaignId}/offers`, { isPublic: true }),
+      apiFetch<BackendOffer[]>(`/campaigns/${campaignId}/offers`),
 
     createOffer: (campaignId: number, data: { channelId: number; amount?: string; format?: string }) =>
       apiFetch<BackendOffer>(`/campaigns/${campaignId}/offers`, { method: 'POST', body: data }),
@@ -438,6 +438,13 @@ export const api = {
     /** Reject a deal (channel owner). Sets status to 'rejected', triggers refund. */
     reject: (dealId: number) =>
       apiFetch<BackendDeal>(`/deals/${dealId}/reject`, { method: 'POST' }),
+
+    /** Post creative to channel (publisher only). Downloads images via Bot API, posts via GramJS. */
+    post: (dealId: number) =>
+      apiFetch<{ success: boolean; messageId: number; channelUsername: string; deal: BackendDeal }>(
+        `/deals/${dealId}/post`,
+        { method: 'POST' },
+      ),
 
     register: (data: {
       dealId: number;

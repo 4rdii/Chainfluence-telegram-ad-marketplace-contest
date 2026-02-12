@@ -28,8 +28,8 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Step 3: Budget & Requirements
-  const [budgetPerChannel, setBudgetPerChannel] = useState(80);
-  const [totalBudget, setTotalBudget] = useState<number | undefined>(undefined);
+  const [budgetPerChannel, setBudgetPerChannel] = useState('80');
+  const [totalBudget, setTotalBudget] = useState('');
   const [selectedFormats, setSelectedFormats] = useState<AdFormat[]>(['1/24', '2/48']);
   const [minSubscribers, setMinSubscribers] = useState(10000);
   const [minEngagement, setMinEngagement] = useState(5);
@@ -90,7 +90,7 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
         title,
         description,
         category,
-        budget: (totalBudget || budgetPerChannel).toString(),
+        budget: totalBudget || budgetPerChannel,
         creativeText,
         contentGuidelines,
         creativeImages: creativeImages.map((img) => img.fileId),
@@ -329,12 +329,14 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
               <div className="relative mt-1">
                 <Input
                   id="budget"
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={budgetPerChannel}
-                  onChange={(e) => setBudgetPerChannel(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || /^\d*\.?\d*$/.test(v)) setBudgetPerChannel(v);
+                  }}
                   className="pr-12"
-                  min="0"
-                  step="1"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                   TON
@@ -350,13 +352,15 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
               <div className="relative mt-1">
                 <Input
                   id="totalBudget"
-                  type="number"
-                  value={totalBudget || ''}
-                  onChange={(e) => setTotalBudget(e.target.value ? Number(e.target.value) : undefined)}
+                  type="text"
+                  inputMode="decimal"
+                  value={totalBudget}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || /^\d*\.?\d*$/.test(v)) setTotalBudget(v);
+                  }}
                   className="pr-12"
                   placeholder="Leave empty for unlimited"
-                  min="0"
-                  step="1"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                   TON
@@ -396,25 +400,28 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
                   <Label htmlFor="minSubs">Min Subscribers</Label>
                   <Input
                     id="minSubs"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={minSubscribers}
-                    onChange={(e) => setMinSubscribers(Number(e.target.value))}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '' || /^\d+$/.test(v)) setMinSubscribers(Number(v) || 0);
+                    }}
                     className="mt-1"
-                    min="0"
-                    step="1000"
                   />
                 </div>
                 <div>
                   <Label htmlFor="minEng">Min Engagement (%)</Label>
                   <Input
                     id="minEng"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={minEngagement}
-                    onChange={(e) => setMinEngagement(Number(e.target.value))}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '' || /^\d*\.?\d*$/.test(v)) setMinEngagement(Number(v) || 0);
+                    }}
                     className="mt-1"
-                    min="0"
-                    max="100"
-                    step="0.1"
                   />
                 </div>
               </div>
@@ -465,7 +472,7 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Budget:</span>
-                  <span className="font-medium">{budgetPerChannel} TON per channel</span>
+                  <span className="font-medium">{budgetPerChannel || '0'} TON per channel</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Formats:</span>

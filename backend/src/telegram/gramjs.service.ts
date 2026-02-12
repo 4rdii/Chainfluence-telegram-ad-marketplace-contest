@@ -462,6 +462,38 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Post a message to a channel (requires admin/owner permission).
+   * Returns the sent message with the new message ID.
+   */
+  async postToChannel(
+    channelUsername: string,
+    text: string,
+    photoBuffers?: Buffer[],
+  ): Promise<{ messageId: number }> {
+    const username = channelUsername.replace(/^@/, '');
+    const peer = `@${username}`;
+
+    // Prepare file buffers with .name for GramJS
+    let file: (Buffer & { name?: string }) | (Buffer & { name?: string })[] | undefined;
+    if (photoBuffers && photoBuffers.length > 0) {
+      const namedBuffers = photoBuffers.map((buf) => {
+        const named = buf as Buffer & { name?: string };
+        named.name = 'photo.jpg'; // Default to jpg
+        return named;
+      });
+      file = namedBuffers.length === 1 ? namedBuffers[0] : namedBuffers;
+    }
+
+    const result = await this.getClient().sendMessage(peer, {
+      message: text || '',
+      file,
+      silent: true,
+    });
+
+    return { messageId: result.id };
+  }
+
   /** Raw invoke – call any TL method directly */
   async invoke<T>(request: Api.AnyRequest): Promise<T> {
     return this.getClient().invoke(request) as Promise<T>;

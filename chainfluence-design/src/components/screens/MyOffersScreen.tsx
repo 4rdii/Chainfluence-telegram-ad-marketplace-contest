@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Briefcase, ArrowRight } from 'lucide-react';
-import { Offer, Campaign, Channel } from '../../types';
+import { Offer, Campaign, Channel, Deal } from '../../types';
 import { StatusBadge } from '../StatusBadge';
 import { FormatBadge } from '../FormatBadge';
 
@@ -8,8 +8,10 @@ interface MyOffersScreenProps {
   offers: Offer[];
   campaigns: Campaign[];
   channels: Channel[];
+  deals: Deal[];
   onBack: () => void;
   onOfferClick: (offer: Offer) => void;
+  onGoToDeal: (deal: Deal) => void;
 }
 
 type OfferFilter = 'pending' | 'accepted' | 'declined';
@@ -18,8 +20,10 @@ export function MyOffersScreen({
   offers,
   campaigns,
   channels,
+  deals,
   onBack,
   onOfferClick,
+  onGoToDeal,
 }: MyOffersScreenProps) {
   const [filter, setFilter] = useState<OfferFilter>('pending');
 
@@ -105,10 +109,24 @@ export function MyOffersScreen({
             const channel = getChannel(offer.channelId);
             if (!campaign || !channel) return null;
 
+            const handleClick = () => {
+              if (offer.status === 'accepted') {
+                // Find matching deal by publisherId + channelId
+                const deal = deals.find(
+                  (d) => d.publisherId === offer.publisherId && d.channelId === offer.channelId
+                );
+                if (deal) {
+                  onGoToDeal(deal);
+                  return;
+                }
+              }
+              onOfferClick(offer);
+            };
+
             return (
               <button
                 key={offer.id}
-                onClick={() => onOfferClick(offer)}
+                onClick={handleClick}
                 className="w-full bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-all text-left"
               >
                 {/* Campaign title + status */}
