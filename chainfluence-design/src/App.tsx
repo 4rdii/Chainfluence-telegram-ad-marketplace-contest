@@ -669,6 +669,24 @@ export default function App() {
   ) => {
     const signResult = await signDealWithTonConnect(tonConnectUI, dealParams);
 
+    dlog.info(`[SIGN] TonConnect signData result for ${role}:`, {
+      signatureLength: signResult.signature?.length,
+      signaturePrefix: signResult.signature?.substring(0, 30),
+      publicKey: signResult.publicKey,
+      walletPublicKey: tonWallet?.account?.publicKey,
+      timestamp: signResult.timestamp,
+      domain: signResult.domain,
+    });
+    dlog.info(`[SIGN] Deal params signed:`, {
+      dealId: dealParams.dealId,
+      channelId: dealParams.channelId,
+      contentHash: dealParams.contentHash?.substring(0, 20) + '...',
+      duration: dealParams.duration,
+      publisher: dealParams.publisher,
+      advertiser: dealParams.advertiser,
+      amount: dealParams.amount,
+    });
+
     return api.escrow.signDeal({
       dealId,
       role,

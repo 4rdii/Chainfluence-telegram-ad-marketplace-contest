@@ -53,6 +53,7 @@ export function PaymentModal({
     try {
       const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 600,
+        network: '-3' as const, // testnet
         messages: [
           {
             address: escrowAddress,

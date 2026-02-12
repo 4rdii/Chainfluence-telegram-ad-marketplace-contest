@@ -74,7 +74,11 @@ export class TelegramBotApi {
       });
     } catch (error) {
       // Message doesn't exist or was deleted
-      if (error instanceof Error && error.message.includes('message to forward not found')) {
+      if (error instanceof Error && (
+        error.message.includes('message to forward not found') ||
+        error.message.includes('MESSAGE_ID_INVALID') ||
+        error.message.includes('message not found')
+      )) {
         return null;
       }
       throw error;
@@ -93,7 +97,11 @@ export class TelegramBotApi {
         message_id: messageId,
       });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('message to copy not found')) {
+      if (error instanceof Error && (
+        error.message.includes('message to copy not found') ||
+        error.message.includes('MESSAGE_ID_INVALID') ||
+        error.message.includes('message not found')
+      )) {
         return null;
       }
       throw error;
