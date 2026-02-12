@@ -199,7 +199,7 @@ export class DealsService {
 
   /**
    * Post the deal's creative content to the channel using GramJS.
-   * Only the publisher (channel owner) can call this.
+   * Either the publisher or the advertiser can call this after both have signed.
    */
   async postCreative(dealId: number, userId: number) {
     const userIdBig = BigInt(userId);
@@ -213,9 +213,19 @@ export class DealsService {
       throw new NotFoundException('Deal not found');
     }
 
-    // Verify caller is the publisher
-    if (deal.publisherId !== userIdBig) {
-      throw new ForbiddenException('Only the publisher can post the creative');
+    // 1. Caller must be a party to the deal (publisher OR advertiser)
+    if (deal.publisherId !== userIdBig && deal.advertiserId !== userIdBig) {
+      throw new ForbiddenException('Only deal parties can post the creative');
+    }
+
+    // 2. Both signatures must exist (prevents malicious early posting)
+    if (!deal.publisherSignature || !deal.advertiserSignature) {
+      throw new BadRequestException('Both parties must sign before posting');
+    }
+
+    // 3. Prevent double-posting
+    if (deal.postId != null) {
+      throw new BadRequestException('Creative already posted');
     }
 
     // Check if channel exists
