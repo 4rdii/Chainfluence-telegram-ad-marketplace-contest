@@ -87,7 +87,7 @@ export class EscrowService {
    *
    * Returns: { deal, teeResult? }
    */
-  private async tryTriggerTee(dealId: number) {
+  async tryTriggerTee(dealId: number) {
     const deal = await this.dealsService.findRaw(dealId);
     const dealResponse = await this.dealsService.findOne(
       Number(deal.publisherId),

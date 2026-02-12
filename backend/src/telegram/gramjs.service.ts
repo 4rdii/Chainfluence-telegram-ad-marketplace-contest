@@ -363,23 +363,34 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
         'GramJsService',
       );
 
-      // Extract language distribution from followers_graph
+      // Extract language distribution from languagesGraph (StatsGraph).
+      // In GramJS, StatsGraph has a `json` field that contains a JSON blob.
       let languageDistribution: Record<string, number> | null = null;
-      const langGraph = stats.languagesGraph as { jsonData?: string } | undefined;
-      if (langGraph?.jsonData) {
+      const langGraph = stats.languagesGraph as { json?: string } | undefined;
+      const langJson = langGraph && typeof langGraph.json === 'string' ? langGraph.json : null;
+      if (langJson) {
         try {
-          const data = JSON.parse(langGraph.jsonData) as {
+          const data = JSON.parse(langJson) as {
             language_codes?: string[];
             percentages?: number[];
           };
-          if (data?.language_codes && data?.percentages) {
+          if (Array.isArray(data.language_codes) && Array.isArray(data.percentages)) {
             languageDistribution = {};
             for (let i = 0; i < data.language_codes.length; i++) {
-              languageDistribution[data.language_codes[i]] = data.percentages[i] ?? 0;
+              const code = data.language_codes[i];
+              const pct = data.percentages[i];
+              if (typeof code === 'string' && typeof pct === 'number') {
+                languageDistribution[code] = pct;
+              }
             }
           }
-        } catch {
-          // JSON parse failed
+        } catch (err) {
+          this.logger.warn(
+            `getChannelBroadcastStats: failed to parse languagesGraph JSON for ${channelUsername}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            'GramJsService',
+          );
         }
       }
 
