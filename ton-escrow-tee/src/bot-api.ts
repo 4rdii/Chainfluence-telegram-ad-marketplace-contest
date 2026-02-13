@@ -139,8 +139,15 @@ export class TelegramBotApi {
     }
 
     // Get content from the forwarded message
-    const content = forwarded.text || forwarded.caption || '';
+    // Trim whitespace — Telegram strips trailing spaces, and frontend trims before hashing
+    const content = (forwarded.text || forwarded.caption || '').trim();
     const actualHash = computeContentHash(content);
+
+    console.log(`[TEE] Content verification — source: ${forwarded.text ? 'text' : forwarded.caption ? 'caption' : 'empty'}`);
+    console.log(`[TEE] Content (first 100): ${JSON.stringify(content.substring(0, 100))}`);
+    console.log(`[TEE] Content length: ${content.length}`);
+    console.log(`[TEE] Actual hash:   0x${actualHash.toString(16).substring(0, 20)}...`);
+    console.log(`[TEE] Expected hash: 0x${expectedContentHash.toString(16).substring(0, 20)}...`);
 
     // Cleanup: delete the forwarded message
     await this.deleteMessage(forwarded.message_id, verificationChatId);

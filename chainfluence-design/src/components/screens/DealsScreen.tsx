@@ -26,9 +26,9 @@ export function DealsScreen({ deals, channels, onDealClick }: DealsScreenProps) 
       case 'active':
         return deals.filter(d => !['RELEASED', 'REFUNDED', 'DISPUTED'].includes(d.status));
       case 'completed':
-        return deals.filter(d => ['RELEASED', 'REFUNDED'].includes(d.status));
+        return deals.filter(d => d.status === 'RELEASED');
       case 'disputed':
-        return deals.filter(d => d.status === 'DISPUTED');
+        return deals.filter(d => ['REFUNDED', 'DISPUTED'].includes(d.status));
       default:
         return deals;
     }

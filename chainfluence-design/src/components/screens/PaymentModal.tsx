@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Shield, Loader2, CheckCircle2, AlertTriangle, Wallet } from 'lucide-react';
 import { useTonConnectUI, useTonWallet, toUserFriendlyAddress } from '@tonconnect/ui-react';
+import { Address } from '@ton/core';
 import { dlog } from '../../lib/debug-log';
 
 // Convert TON to nanoTON (1 TON = 10^9 nanoTON)
@@ -9,7 +10,41 @@ const toNano = (amount: string | number): string => {
   return Math.floor(ton * 1_000_000_000).toString();
 };
 
-const TREASURY_ADDRESS = '0QAwcyyX6LdXb1vSi6_Z8DgwuFtI155iRH68L4LE2b14Hwk0';
+/** Check on-chain balance of an address via toncenter testnet API */
+async function checkBalanceOnChain(address: string): Promise<bigint> {
+  const url = `https://testnet.toncenter.com/api/v2/getAddressBalance?address=${encodeURIComponent(address)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.ok && data.result) {
+    return BigInt(data.result);
+  }
+  return 0n;
+}
+
+/** Poll escrow balance a few times to see if funds arrived on-chain */
+async function waitForEscrowDeposit(
+  escrowAddress: string,
+  expectedNano: bigint,
+  maxAttempts = 4,
+  intervalMs = 3000,
+): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, intervalMs));
+    try {
+      const balance = await checkBalanceOnChain(escrowAddress);
+      dlog.info(`Escrow balance check ${i + 1}/${maxAttempts}: ${balance} nano (need ${expectedNano})`);
+      if (balance >= expectedNano) return true;
+    } catch (e) {
+      dlog.error('Balance check error:', e);
+    }
+  }
+  return false;
+}
+
+// Treasury address — stored as non-bounceable without testnet flag (UQ prefix)
+// so all wallet implementations accept it
+const TREASURY_ADDRESS = Address.parse('0QAwcyyX6LdXb1vSi6_Z8DgwuFtI155iRH68L4LE2b14Hwk0')
+  .toString({ bounceable: false });
 
 interface PaymentModalProps {
   amount: number;
@@ -52,34 +87,74 @@ export function PaymentModal({
       return;
     }
 
+    // Warn if wallet is on mainnet (TON Space doesn't support testnet)
+    const walletChain = wallet.account?.chain;
+    dlog.info('Wallet chain:', walletChain, 'expected: -3 (testnet)');
+    if (walletChain && walletChain !== '-3') {
+      setState('error');
+      setErrorMessage(
+        'Your wallet is on mainnet. Please switch to a testnet wallet (e.g. Tonkeeper in testnet mode).'
+      );
+      return;
+    }
+
     setState('processing');
     setErrorMessage('');
 
     try {
+      const escrowNano = toNano(amount);
+      const feeNano = toNano(feeAmount);
+      dlog.info('Sending TX:', { escrowAddress, escrowNano, treasury: TREASURY_ADDRESS, feeNano });
+
       const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 600,
-        network: '-3' as const, // testnet
         messages: [
           {
             address: escrowAddress,
-            amount: toNano(amount),
+            amount: escrowNano,
           },
           {
             address: TREASURY_ADDRESS,
-            amount: toNano(feeAmount),
+            amount: feeNano,
           },
         ],
       };
 
-      await tonConnectUI.sendTransaction(transaction);
+      const result = await tonConnectUI.sendTransaction(transaction);
+      dlog.info('TX sent, boc length:', result?.boc?.length ?? 'no boc');
       setState('success');
       onPaymentSent(dealId);
     } catch (error) {
       dlog.error('Transaction error:', error);
-      setState('error');
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
+
+      // TonConnect bridge often loses the callback when returning from wallet
+      // to the mini-app, causing "Transaction was not sent" even though the TX
+      // was actually broadcast on-chain. Verify by checking escrow balance.
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('Transaction was not sent')) {
+        dlog.info('TonConnect bridge error — verifying on-chain...');
+        const expectedNano = BigInt(toNano(amount));
+        const deposited = await waitForEscrowDeposit(escrowAddress, expectedNano);
+        if (deposited) {
+          dlog.info('Escrow funded on-chain — payment confirmed');
+          setState('success');
+          onPaymentSent(dealId);
+        } else {
+          dlog.info('Escrow not funded — TX likely failed');
+          setState('error');
+          setErrorMessage('Transaction could not be verified on-chain. Please check your wallet and try again.');
+        }
+        return;
       }
+
+      // User explicitly cancelled in the wallet
+      if (msg.includes('User rejected') || msg.includes('Cancelled')) {
+        setState('confirm');
+        return;
+      }
+
+      setState('error');
+      setErrorMessage(msg);
     }
   };
 

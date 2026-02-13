@@ -8,6 +8,8 @@ interface FormatBadgeProps {
 export function FormatBadge({ format, size = 'md' }: FormatBadgeProps) {
   const getFormatLabel = () => {
     switch (format) {
+      case 'test':
+        return '3min';
       case '1/24':
         return '1/24';
       case '2/48':

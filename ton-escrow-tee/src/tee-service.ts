@@ -131,16 +131,58 @@ export class TeeService {
       return { success: false, error: `Advertiser signature invalid: ${advertiserCheck.error}` };
     }
 
-    // 3. Check deposit at escrow wallet
+    // 3. Check deposit at escrow wallet (poll up to 60s for deposit to confirm)
     const escrowWallet = await deriveEscrowWallet(this.mnemonic, params.dealId);
-    const balance = await withRetry(() => getWalletBalance(this.client, escrowWallet.addressRaw));
+    let balance = await withRetry(() => getWalletBalance(this.client, escrowWallet.addressRaw));
 
     if (balance < params.amount) {
+      console.log(`[TEE] Balance ${balance} < expected ${params.amount}, waiting for deposit to confirm...`);
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await sleep(10000); // wait 10s between checks
+        balance = await withRetry(() => getWalletBalance(this.client, escrowWallet.addressRaw));
+        console.log(`[TEE] Balance check attempt ${attempt + 1}: ${balance}`);
+        if (balance >= params.amount) break;
+      }
+    }
+
+    if (balance < params.amount) {
+      // No deposit — nothing to refund
       return {
         success: false,
         error: `Insufficient deposit. Expected: ${params.amount}, Found: ${balance}`,
       };
     }
+
+    // From here on, escrow has funds — refund advertiser on any failure
+    const refundOnFailure = async (reason: string) => {
+      console.log(`[TEE] Verification failed: ${reason}. Refunding escrow to advertiser.`);
+      try {
+        const gasReserve = toNano('0.01');
+        const currentBalance = await getWalletBalance(this.client, escrowWallet.addressRaw);
+        const transferAmount = currentBalance > gasReserve ? currentBalance - gasReserve : 0n;
+        if (transferAmount > 0n) {
+          const wallet = WalletContractV4.create({ publicKey: escrowWallet.publicKey, workchain: 0 });
+          const walletContract = this.client.open(wallet);
+          const seqno = await walletContract.getSeqno();
+          await walletContract.sendTransfer({
+            secretKey: escrowWallet.secretKey,
+            seqno,
+            messages: [
+              internal({
+                to: params.advertiser,
+                value: transferAmount,
+                body: `Refund: verification failed — ${reason}`,
+                bounce: false,
+              }),
+            ],
+          });
+          console.log(`[TEE] Refund sent to advertiser, seqno=${seqno}`);
+        }
+      } catch (refundErr) {
+        console.error(`[TEE] Refund failed:`, refundErr);
+      }
+      return { success: false, error: reason };
+    };
 
     // 4. Verify post exists and content matches
     const contentStatus = await this.botApi.checkPostStatus(
@@ -151,17 +193,16 @@ export class TeeService {
     );
 
     if (contentStatus === 'deleted') {
-      return { success: false, error: 'Post not found in channel' };
+      return refundOnFailure('Post not found in channel');
     }
 
     if (contentStatus === 'modified') {
-      return { success: false, error: 'Post content does not match expected hash' };
+      return refundOnFailure('Post content does not match expected hash');
     }
 
     // 5. Register deal on-chain
     try {
       const adminWallet = this.getAdminWallet();
-      const contract = this.client.open(this.dealRegistry);
 
       const wallet = WalletContractV4.create({
         publicKey: adminWallet.publicKey,
@@ -188,13 +229,11 @@ export class TeeService {
 
       return {
         success: true,
-        txHash: `seqno:${seqno}`, // Simplified - in production, get actual tx hash
+        txHash: `seqno:${seqno}`,
       };
     } catch (error) {
-      return {
-        success: false,
-        error: `Failed to register deal: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
+      const reason = `Failed to register deal: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      return refundOnFailure(reason);
     }
   }
 
@@ -224,21 +263,29 @@ export class TeeService {
   // FUNCTION 3: checkDeal
   // ============================================================
 
+  /** Deposit timeout: if deal is not registered on-chain within this window, advertiser can reclaim */
+  private static DEPOSIT_TIMEOUT_SECONDS = 12 * 60 * 60; // 12 hours
+
   /**
    * Check deal conditions and execute release/refund if appropriate
    *
    * Logic:
+   * - If deal not on-chain but escrow has funds and deposit timeout exceeded → Refund
    * - If now >= postedAt + duration AND content unchanged → Release to publisher
    * - If content changed/deleted → Refund to advertiser
    * - If duration not passed AND content unchanged → Do nothing (pending)
    */
-  async checkDeal(dealId: number, verificationChatId: number): Promise<CheckDealResult> {
+  async checkDeal(
+    dealId: number,
+    verificationChatId: number,
+  ): Promise<CheckDealResult> {
     // 1. Get deal from registry
     const contract = this.client.open(this.dealRegistry);
     const deal = await contract.getDeal(BigInt(dealId));
 
     if (!deal) {
-      return { action: 'pending', reason: 'Deal not found in registry' };
+      // Deal not on-chain — check for deposit timeout refund (reads deposit time + sender from TON)
+      return this.handleUnregisteredDeal(dealId);
     }
 
     // 2. Check content status via Bot API
@@ -269,6 +316,121 @@ export class TeeService {
       action: 'pending',
       reason: `Duration not passed. ${remainingSeconds}s remaining.`,
     };
+  }
+
+  /**
+   * Handle case where deal is not registered on-chain.
+   * Reads deposit time directly from TON blockchain (escrow wallet transactions).
+   * If the escrow has funds and the deposit timeout has passed, refund the depositor.
+   */
+  private async handleUnregisteredDeal(
+    dealId: number,
+  ): Promise<CheckDealResult> {
+    try {
+      const escrowWallet = await deriveEscrowWallet(this.mnemonic, dealId);
+      const balance = await getWalletBalance(this.client, escrowWallet.addressRaw);
+
+      if (balance === 0n) {
+        return { action: 'pending', reason: 'Deal not found in registry. No funds in escrow.' };
+      }
+
+      // Read the first incoming deposit transaction from the blockchain
+      const depositInfo = await this.getFirstDeposit(escrowWallet.addressRaw);
+      if (!depositInfo) {
+        return { action: 'pending', reason: 'Deal not registered on-chain. Could not read deposit history.' };
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const elapsed = now - depositInfo.timestamp;
+
+      if (elapsed < TeeService.DEPOSIT_TIMEOUT_SECONDS) {
+        const remaining = TeeService.DEPOSIT_TIMEOUT_SECONDS - elapsed;
+        const hours = Math.floor(remaining / 3600);
+        const mins = Math.floor((remaining % 3600) / 60);
+        return {
+          action: 'pending',
+          reason: `Deal not registered on-chain. Refund available in ${hours}h ${mins}m.`,
+        };
+      }
+
+      // Timeout exceeded — refund to the original depositor (address read from blockchain)
+      if (!depositInfo.senderAddress) {
+        return { action: 'pending', reason: 'Cannot determine depositor address from blockchain.' };
+      }
+
+      const gasReserve = toNano('0.01');
+      const transferAmount = balance > gasReserve ? balance - gasReserve : 0n;
+
+      if (transferAmount <= 0n) {
+        return { action: 'pending', reason: 'Insufficient balance for transfer' };
+      }
+
+      const wallet = WalletContractV4.create({
+        publicKey: escrowWallet.publicKey,
+        workchain: 0,
+      });
+      const walletContract = this.client.open(wallet);
+      const seqno = await walletContract.getSeqno();
+
+      await walletContract.sendTransfer({
+        secretKey: escrowWallet.secretKey,
+        seqno,
+        messages: [
+          internal({
+            to: Address.parse(depositInfo.senderAddress),
+            value: transferAmount,
+            body: `Timeout refund: Deal #${dealId}`,
+            bounce: false,
+          }),
+        ],
+      });
+
+      return {
+        action: 'refunded',
+        txHash: `seqno:${seqno}`,
+      };
+    } catch (error) {
+      return {
+        action: 'pending',
+        reason: `Timeout refund failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+
+  /**
+   * Read the first incoming deposit to an escrow wallet from the TON blockchain.
+   * Returns the deposit timestamp and sender address.
+   */
+  private async getFirstDeposit(
+    address: Address,
+  ): Promise<{ timestamp: number; senderAddress: string | null } | null> {
+    try {
+      const txs = await withRetry(() =>
+        this.client.getTransactions(address, { limit: 10 }),
+      );
+
+      if (!txs || txs.length === 0) return null;
+
+      // Find the earliest incoming value transfer (the deposit)
+      // Transactions are returned newest-first, so the last one with incoming value is the deposit
+      let earliest: { timestamp: number; senderAddress: string | null } | null = null;
+
+      for (const tx of txs) {
+        const inMsg = tx.inMessage;
+        if (inMsg && inMsg.info.type === 'internal' && inMsg.info.value.coins > 0n) {
+          const sender = inMsg.info.src?.toString({ bounceable: false }) ?? null;
+          const ts = tx.now;
+          if (!earliest || ts < earliest.timestamp) {
+            earliest = { timestamp: ts, senderAddress: sender };
+          }
+        }
+      }
+
+      return earliest;
+    } catch (error) {
+      console.error(`Failed to read deposit transactions for ${address}:`, error);
+      return null;
+    }
   }
 
   /**

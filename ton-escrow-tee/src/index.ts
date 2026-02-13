@@ -34,6 +34,8 @@ import { Address } from '@ton/core';
 
 dotenv.config();
 
+export const TEE_VERSION = '0.2.1';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -79,17 +81,23 @@ app.get('/', (_req: Request, res: Response) => {
     service: 'Chainfluence TEE Escrow Service',
     status: 'running',
     mode: teeService ? 'full' : 'wallet-only',
+    version: TEE_VERSION,
     endpoints: [
       'POST /createEscrowWallet',
       'POST /verifyAndRegisterDeal',
       'POST /checkDeal',
       'GET /health',
+      'GET /version',
     ],
   });
 });
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: Date.now() });
+});
+
+app.get('/version', (_req: Request, res: Response) => {
+  res.json({ version: TEE_VERSION });
 });
 
 // ============================================================
@@ -285,6 +293,7 @@ async function main() {
     console.log(`  POST /checkDeal - Check deal status and execute release/refund`);
     console.log(`  GET  /adminWallet - Get TEE admin wallet info`);
     console.log(`  GET  /health - Health check`);
+    console.log(`  GET  /version - TEE version (${TEE_VERSION})`);
     console.log('='.repeat(60));
   });
 }

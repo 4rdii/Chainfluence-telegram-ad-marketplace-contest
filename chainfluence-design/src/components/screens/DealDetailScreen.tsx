@@ -385,7 +385,39 @@ export function DealDetailScreen({
         </div>
       )}
 
-      {/* 6. Ad posted — actions for each party */}
+      {/* 6a. Advertiser: Dispute & Refund (before ad posted — deposit timeout protection) */}
+      {isAdvertiser && !isPosted && deal.status !== 'RELEASED' && deal.status !== 'REFUNDED' && onCheckDeal && (
+        <div className="p-4 border-b border-border">
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-sm text-muted-foreground mb-3 text-center">
+              If the deal is stuck and 12 hours have passed since your deposit, you can request a refund.
+            </p>
+            {actionError && (
+              <p className="text-sm text-[var(--error-red)] mb-3 text-center">{actionError}</p>
+            )}
+            <Button
+              onClick={handleCheckDeal}
+              variant="outline"
+              className="w-full text-[var(--error-red)] border-[var(--error-red)]/30 hover:bg-[var(--error-red)]/10"
+              disabled={isChecking}
+            >
+              {isChecking ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Dispute & Refund
+                </span>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 6b. Ad posted — actions for each party */}
       {isPosted && deal.status !== 'RELEASED' && deal.status !== 'REFUNDED' && (
         <div className="p-4">
           <div className="bg-card border border-border rounded-lg p-4">

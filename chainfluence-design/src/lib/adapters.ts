@@ -154,6 +154,7 @@ const dealStatusMap: Record<string, DealStatus> = {
 };
 
 const durationToFormat: Record<number, AdFormat> = {
+  180: 'test',
   86400: '1/24',
   172800: '2/48',
   259200: '3/72',

@@ -47,6 +47,7 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
   const [verified, setVerified] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<ChannelCategory>('Crypto');
   const [pricing, setPricing] = useState<FormatPricing[]>([
+    { format: 'test', price: 0, enabled: false, description: '3-minute test post' },
     { format: '1/24', price: 0, enabled: false, description: 'Pinned for 24 hours' },
     { format: '2/48', price: 0, enabled: false, description: 'Stay for 48 hours' },
     { format: '3/72', price: 0, enabled: false, description: 'Stay for 72 hours' },
