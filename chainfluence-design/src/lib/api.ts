@@ -525,6 +525,13 @@ export const api = {
         '/escrow/verify-and-register',
         { method: 'POST', body: payload },
       ),
+
+    /** Trigger a TEE check on the deal (release or refund based on conditions) */
+    checkDeal: (dealId: number) =>
+      apiFetch<{ action: 'pending' | 'released' | 'refunded'; reason?: string; txHash?: string }>(
+        '/escrow/check-deal',
+        { method: 'POST', body: { dealId } },
+      ),
   },
 
   uploads: {
