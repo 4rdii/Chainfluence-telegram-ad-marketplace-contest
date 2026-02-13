@@ -131,16 +131,58 @@ export class TeeService {
       return { success: false, error: `Advertiser signature invalid: ${advertiserCheck.error}` };
     }
 
-    // 3. Check deposit at escrow wallet
+    // 3. Check deposit at escrow wallet (poll up to 60s for deposit to confirm)
     const escrowWallet = await deriveEscrowWallet(this.mnemonic, params.dealId);
-    const balance = await withRetry(() => getWalletBalance(this.client, escrowWallet.addressRaw));
+    let balance = await withRetry(() => getWalletBalance(this.client, escrowWallet.addressRaw));
 
     if (balance < params.amount) {
+      console.log(`[TEE] Balance ${balance} < expected ${params.amount}, waiting for deposit to confirm...`);
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await sleep(10000); // wait 10s between checks
+        balance = await withRetry(() => getWalletBalance(this.client, escrowWallet.addressRaw));
+        console.log(`[TEE] Balance check attempt ${attempt + 1}: ${balance}`);
+        if (balance >= params.amount) break;
+      }
+    }
+
+    if (balance < params.amount) {
+      // No deposit — nothing to refund
       return {
         success: false,
         error: `Insufficient deposit. Expected: ${params.amount}, Found: ${balance}`,
       };
     }
+
+    // From here on, escrow has funds — refund advertiser on any failure
+    const refundOnFailure = async (reason: string) => {
+      console.log(`[TEE] Verification failed: ${reason}. Refunding escrow to advertiser.`);
+      try {
+        const gasReserve = toNano('0.01');
+        const currentBalance = await getWalletBalance(this.client, escrowWallet.addressRaw);
+        const transferAmount = currentBalance > gasReserve ? currentBalance - gasReserve : 0n;
+        if (transferAmount > 0n) {
+          const wallet = WalletContractV4.create({ publicKey: escrowWallet.publicKey, workchain: 0 });
+          const walletContract = this.client.open(wallet);
+          const seqno = await walletContract.getSeqno();
+          await walletContract.sendTransfer({
+            secretKey: escrowWallet.secretKey,
+            seqno,
+            messages: [
+              internal({
+                to: params.advertiser,
+                value: transferAmount,
+                body: `Refund: verification failed — ${reason}`,
+                bounce: false,
+              }),
+            ],
+          });
+          console.log(`[TEE] Refund sent to advertiser, seqno=${seqno}`);
+        }
+      } catch (refundErr) {
+        console.error(`[TEE] Refund failed:`, refundErr);
+      }
+      return { success: false, error: reason };
+    };
 
     // 4. Verify post exists and content matches
     const contentStatus = await this.botApi.checkPostStatus(
@@ -151,17 +193,16 @@ export class TeeService {
     );
 
     if (contentStatus === 'deleted') {
-      return { success: false, error: 'Post not found in channel' };
+      return refundOnFailure('Post not found in channel');
     }
 
     if (contentStatus === 'modified') {
-      return { success: false, error: 'Post content does not match expected hash' };
+      return refundOnFailure('Post content does not match expected hash');
     }
 
     // 5. Register deal on-chain
     try {
       const adminWallet = this.getAdminWallet();
-      const contract = this.client.open(this.dealRegistry);
 
       const wallet = WalletContractV4.create({
         publicKey: adminWallet.publicKey,
@@ -188,13 +229,11 @@ export class TeeService {
 
       return {
         success: true,
-        txHash: `seqno:${seqno}`, // Simplified - in production, get actual tx hash
+        txHash: `seqno:${seqno}`,
       };
     } catch (error) {
-      return {
-        success: false,
-        error: `Failed to register deal: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
+      const reason = `Failed to register deal: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      return refundOnFailure(reason);
     }
   }
 

@@ -474,11 +474,12 @@ export default function App() {
       const { address } = await api.escrow.createWallet(dealId);
 
       // Compute content hash from the creative text
-      const contentHashStr = await computeContentHash(booking.creativeText);
+      // Trim whitespace — Telegram strips trailing spaces/newlines from messages
+      const contentHashStr = await computeContentHash(booking.creativeText.trim());
 
       // Map format → duration
       const formatDurations: Record<string, number> = {
-        '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
+        'test': 180, '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
       };
       const duration = formatDurations[booking.format] || 86400;
       const amountNano = Math.floor(dealAmount * 1_000_000_000).toString();
@@ -556,11 +557,11 @@ export default function App() {
     const { address } = await api.escrow.createWallet(dealId);
 
     // 5. Compute content hash from campaign creative
-    const contentHashStr = await computeContentHash(campaign.creativeText || '');
+    const contentHashStr = await computeContentHash((campaign.creativeText || '').trim());
 
     // 6. Map format → duration
     const formatDurations: Record<string, number> = {
-      '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
+      'test': 180, '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
     };
     const duration = formatDurations[offer.format] || 86400;
 

@@ -15,7 +15,7 @@ export interface User {
 // Channel types
 export type ChannelCategory = 'Crypto' | 'DeFi' | 'Tech' | 'News' | 'Education' | 'Entertainment' | 'Lifestyle' | 'Trading' | 'NFT' | 'Gaming';
 
-export type AdFormat = '1/24' | '2/48' | '3/72' | 'eternal';
+export type AdFormat = 'test' | '1/24' | '2/48' | '3/72' | 'eternal';
 
 export interface FormatPricing {
   format: AdFormat;
