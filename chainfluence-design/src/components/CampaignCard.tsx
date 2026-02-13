@@ -8,9 +8,10 @@ interface CampaignCardProps {
   campaign: Campaign;
   onViewDetails: (campaign: Campaign) => void;
   showMatchIndicator?: boolean;
+  currentUserId?: string;
 }
 
-export function CampaignCard({ campaign, onViewDetails, showMatchIndicator = false }: CampaignCardProps) {
+export function CampaignCard({ campaign, onViewDetails, showMatchIndicator = false, currentUserId }: CampaignCardProps) {
   const daysUntilDeadline = Math.ceil(
     (new Date(campaign.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
   );
@@ -74,7 +75,7 @@ export function CampaignCard({ campaign, onViewDetails, showMatchIndicator = fal
         onClick={() => onViewDetails(campaign)}
         className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
       >
-        View & Offer
+        {currentUserId && campaign.advertiserId === currentUserId ? 'Review Offers' : 'View & Offer'}
       </Button>
     </div>
   );

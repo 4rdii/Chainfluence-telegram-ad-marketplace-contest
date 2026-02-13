@@ -1,7 +1,14 @@
-import { Home, Megaphone, Rocket, Handshake, User } from 'lucide-react';
+import { Megaphone, Rocket, Handshake, User, type LucideIcon } from 'lucide-react';
 import { hapticSelection } from '../lib/telegram';
 
 export type TabType = 'home' | 'channels' | 'campaigns' | 'deals' | 'profile';
+
+interface TabDef {
+  id: TabType;
+  icon?: LucideIcon;
+  logo?: boolean;
+  label: string;
+}
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -10,12 +17,12 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ activeTab, onTabChange, notificationCount = 0 }: BottomNavProps) {
-  const tabs = [
-    { id: 'home' as TabType, icon: Home, label: 'Home' },
-    { id: 'channels' as TabType, icon: Megaphone, label: 'Channels' },
-    { id: 'campaigns' as TabType, icon: Rocket, label: 'Campaigns' },
-    { id: 'deals' as TabType, icon: Handshake, label: 'Deals' },
-    { id: 'profile' as TabType, icon: User, label: 'Profile' },
+  const tabs: TabDef[] = [
+    { id: 'home', logo: true, label: 'Home' },
+    { id: 'channels', icon: Megaphone, label: 'Channels' },
+    { id: 'campaigns', icon: Rocket, label: 'Campaigns' },
+    { id: 'deals', icon: Handshake, label: 'Deals' },
+    { id: 'profile', icon: User, label: 'Profile' },
   ];
 
   const handleTabClick = (tabId: TabType) => {
@@ -38,7 +45,11 @@ export function BottomNav({ activeTab, onTabChange, notificationCount = 0 }: Bot
                 isActive ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
-              <Icon className="w-5 h-5 mb-1" />
+              {tab.logo ? (
+                <img src="/logo.svg" alt="Chainfluence" className="w-6 h-6 mb-0.5" />
+              ) : Icon ? (
+                <Icon className="w-5 h-5 mb-1" />
+              ) : null}
               <span className="text-xs">{tab.label}</span>
               {tab.id === 'home' && notificationCount > 0 && (
                 <span className="absolute top-2 right-1/4 bg-[var(--error-red)] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
