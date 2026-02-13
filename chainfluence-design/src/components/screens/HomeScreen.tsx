@@ -53,9 +53,7 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
       <div className="bg-card border-b border-border p-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <svg className="w-8 h-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
+            <img src="/logo.svg" alt="Chainfluence" className="w-10 h-10" />
             <h1 className="text-xl font-semibold">Chainfluence</h1>
           </div>
           <div className="flex items-center gap-2">

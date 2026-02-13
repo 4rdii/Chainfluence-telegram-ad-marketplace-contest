@@ -822,8 +822,16 @@ export default function App() {
         {/* Loading */}
         {screen.type === 'loading' && (
           <div className="flex flex-col items-center justify-center min-h-screen gap-6">
-            <Loader2 className="w-12 h-12 text-primary animate-spin" />
-            <p className="text-muted-foreground text-sm">Loading...</p>
+            <div className="animate-pulse">
+              <img src="/logo.svg" alt="Chainfluence" className="w-20 h-20" />
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <h1 className="text-xl font-bold">Chainfluence</h1>
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading...</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -861,6 +869,7 @@ export default function App() {
             onCampaignClick={handleCampaignClick}
             onCreateCampaign={handleCreateCampaign}
             userRole={getUserRole()}
+            currentUserId={user.id}
           />
         )}
 

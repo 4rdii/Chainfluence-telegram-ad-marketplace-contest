@@ -142,9 +142,9 @@ export function DealDetailScreen({
                 try { await onRefresh(); } finally { setIsRefreshing(false); }
               }}
               disabled={isRefreshing}
-              className="p-2 rounded-lg hover:bg-accent transition-colors"
+              className="p-2 rounded-lg hover:bg-accent active:scale-90 transition-all"
             >
-              <RefreshCw className={`w-5 h-5 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 text-muted-foreground transition-transform duration-300 ${isRefreshing ? 'animate-spin' : 'hover:rotate-180'}`} />
             </button>
           )}
         </div>

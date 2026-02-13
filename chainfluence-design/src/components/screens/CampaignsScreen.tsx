@@ -10,9 +10,10 @@ interface CampaignsScreenProps {
   onCampaignClick: (campaign: Campaign) => void;
   onCreateCampaign: () => void;
   userRole: 'publisher' | 'advertiser' | 'both';
+  currentUserId?: string;
 }
 
-export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, userRole }: CampaignsScreenProps) {
+export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, userRole, currentUserId }: CampaignsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<ChannelCategory[]>([]);
@@ -184,6 +185,7 @@ export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, 
                 campaign={campaign}
                 onViewDetails={onCampaignClick}
                 showMatchIndicator={index === 0 && sortBy === 'match'}
+                currentUserId={currentUserId}
               />
             ))}
           </div>
