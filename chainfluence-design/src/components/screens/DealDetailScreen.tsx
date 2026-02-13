@@ -1,5 +1,5 @@
 import { Deal, Channel, User } from '../../types';
-import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, RefreshCw, XCircle, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, RefreshCw, XCircle, Send, AlertTriangle, Unlock } from 'lucide-react';
 import { StatusBadge } from '../StatusBadge';
 import { FormatBadge } from '../FormatBadge';
 import { Button } from '../ui/button';
@@ -16,16 +16,19 @@ interface DealDetailScreenProps {
   onRejectDeal?: (deal: Deal) => Promise<void>;
   /** Advertiser approves the deal (prompts wallet to sign) */
   onAdvertiserApprove?: (deal: Deal) => Promise<void>;
+  /** Trigger TEE check on the deal (release/refund based on conditions) */
+  onCheckDeal?: (deal: Deal) => Promise<void>;
   /** Refresh deal status from backend */
   onRefresh?: () => Promise<void>;
 }
 
 export function DealDetailScreen({
   deal, channel, user, onBack,
-  onApproveDeal, onRejectDeal, onAdvertiserApprove, onRefresh,
+  onApproveDeal, onRejectDeal, onAdvertiserApprove, onCheckDeal, onRefresh,
 }: DealDetailScreenProps) {
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionError, setActionError] = useState('');
 
@@ -96,6 +99,19 @@ export function DealDetailScreen({
       setActionError(err instanceof Error ? err.message : 'Failed to approve deal');
     } finally {
       setIsApproving(false);
+    }
+  };
+
+  const handleCheckDeal = async () => {
+    if (!onCheckDeal) return;
+    setIsChecking(true);
+    setActionError('');
+    try {
+      await onCheckDeal(deal);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Check deal failed');
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -369,17 +385,59 @@ export function DealDetailScreen({
         </div>
       )}
 
-      {/* 6. Ad posted — waiting for release */}
+      {/* 6. Ad posted — actions for each party */}
       {isPosted && deal.status !== 'RELEASED' && deal.status !== 'REFUNDED' && (
         <div className="p-4">
           <div className="bg-card border border-border rounded-lg p-4">
-            <div className="p-3 bg-[var(--success-green)]/10 rounded-lg text-center">
+            <div className="p-3 bg-[var(--success-green)]/10 rounded-lg text-center mb-4">
               <CheckCircle2 className="w-8 h-8 text-[var(--success-green)] mx-auto mb-2" />
               <p className="font-medium mb-1">Ad is Live</p>
               <p className="text-sm text-muted-foreground">
-                Ad has been posted to the channel. Awaiting TEE verification and fund release.
+                TEE verifies conditions automatically. You can also trigger a check manually.
               </p>
             </div>
+            {actionError && (
+              <p className="text-sm text-[var(--error-red)] mb-3 text-center">{actionError}</p>
+            )}
+            {isPublisher && onCheckDeal && (
+              <Button
+                onClick={handleCheckDeal}
+                className="w-full bg-[var(--success-green)] text-white hover:bg-[var(--success-green)]/90"
+                disabled={isChecking}
+              >
+                {isChecking ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Checking...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <Unlock className="w-4 h-4" />
+                    Release Funds
+                  </span>
+                )}
+              </Button>
+            )}
+            {isAdvertiser && onCheckDeal && (
+              <Button
+                onClick={handleCheckDeal}
+                variant="outline"
+                className="w-full text-[var(--error-red)] border-[var(--error-red)]/30 hover:bg-[var(--error-red)]/10"
+                disabled={isChecking}
+              >
+                {isChecking ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Checking...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Dispute & Refund
+                  </span>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       )}

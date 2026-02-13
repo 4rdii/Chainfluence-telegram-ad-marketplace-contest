@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { EscrowService } from './escrow.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
+import { CheckDealDto } from './dto/check-deal.dto';
 import { VerifyAndRegisterDealDto } from './dto/verify-and-register-deal.dto';
 import { SignDealDto } from './dto/sign-deal.dto';
 import { ConfirmPostedDto } from './dto/confirm-posted.dto';
@@ -40,6 +41,18 @@ export class EscrowController {
     @Body() dto: ConfirmPostedDto,
   ) {
     return this.escrowService.confirmPosted(userId, dto);
+  }
+
+  /**
+   * Either party can trigger a TEE check on the deal.
+   * TEE will release to publisher or refund to advertiser based on conditions.
+   */
+  @Post('check-deal')
+  checkDeal(
+    @CurrentUserId() userId: number,
+    @Body() dto: CheckDealDto,
+  ) {
+    return this.escrowService.checkDeal(userId, dto.dealId);
   }
 
   /**

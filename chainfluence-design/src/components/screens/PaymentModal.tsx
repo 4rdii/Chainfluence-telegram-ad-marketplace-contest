@@ -9,8 +9,11 @@ const toNano = (amount: string | number): string => {
   return Math.floor(ton * 1_000_000_000).toString();
 };
 
+const TREASURY_ADDRESS = '0QAwcyyX6LdXb1vSi6_Z8DgwuFtI155iRH68L4LE2b14Hwk0';
+
 interface PaymentModalProps {
   amount: number;
+  feeAmount: number;
   escrowAddress: string;
   dealLabel: string;
   dealId: number;
@@ -24,6 +27,7 @@ type PaymentState = 'connect' | 'confirm' | 'processing' | 'success' | 'error';
 
 export function PaymentModal({
   amount,
+  feeAmount,
   escrowAddress,
   dealLabel,
   dealId,
@@ -31,7 +35,8 @@ export function PaymentModal({
   onConfirm,
   onClose,
 }: PaymentModalProps) {
-  dlog.info('PaymentScreen rendered', { amount, escrowAddress, dealId });
+  const totalAmount = amount + feeAmount;
+  dlog.info('PaymentScreen rendered', { amount, feeAmount, totalAmount, escrowAddress, dealId });
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
   const [state, setState] = useState<PaymentState>(wallet ? 'confirm' : 'connect');
@@ -57,7 +62,11 @@ export function PaymentModal({
         messages: [
           {
             address: escrowAddress,
-            amount: toNano(amount.toString()).toString(),
+            amount: toNano(amount),
+          },
+          {
+            address: TREASURY_ADDRESS,
+            amount: toNano(feeAmount),
           },
         ],
       };
@@ -124,8 +133,16 @@ export function PaymentModal({
 
           <div className="bg-card border border-border rounded-xl p-4 space-y-2 mb-6">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Amount</span>
+              <span className="text-sm text-muted-foreground">Deal amount</span>
               <span className="text-sm font-semibold">{amount.toFixed(2)} TON</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Platform fee (5%)</span>
+              <span className="text-sm">{feeAmount.toFixed(2)} TON</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-border pt-2">
+              <span className="text-sm font-semibold">Total</span>
+              <span className="text-sm font-semibold">{totalAmount.toFixed(2)} TON</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">For</span>
@@ -162,15 +179,21 @@ export function PaymentModal({
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
             </div>
-            <p className="text-3xl font-bold mb-1">{amount.toFixed(2)} TON</p>
+            <p className="text-3xl font-bold mb-1">{totalAmount.toFixed(2)} TON</p>
             <p className="text-sm text-muted-foreground">{dealLabel}</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4 space-y-3 mb-6">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">To (Escrow)</span>
+              <span className="text-sm text-muted-foreground">Deal ({amount.toFixed(2)} TON) → Escrow</span>
               <span className="text-sm font-mono">
                 {truncateAddress(escrowAddress)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Fee ({feeAmount.toFixed(2)} TON) → Platform</span>
+              <span className="text-sm font-mono">
+                {truncateAddress(TREASURY_ADDRESS)}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -252,7 +275,7 @@ export function PaymentModal({
             </div>
             <h2 className="text-lg font-semibold mb-2">Payment Confirmed!</h2>
             <p className="text-sm text-muted-foreground mb-1">
-              {amount.toFixed(2)} TON deposited to escrow
+              {amount.toFixed(2)} TON to escrow + {feeAmount.toFixed(2)} TON fee
             </p>
             <p className="text-xs text-muted-foreground">
               Deal has been created successfully

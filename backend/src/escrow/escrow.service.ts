@@ -166,6 +166,29 @@ export class EscrowService {
     return { deal: dealResponse, teeResult };
   }
 
+  // ── Manual check-deal (user-triggered TEE check) ──
+
+  async checkDeal(userId: number, dealId: number) {
+    const deal = await this.dealsService.findRaw(dealId);
+    const userIdBig = BigInt(userId);
+    if (deal.publisherId !== userIdBig && deal.advertiserId !== userIdBig) {
+      throw new BadRequestException('You are not a party to this deal');
+    }
+
+    const result = await this.teeClient.checkDeal({
+      dealId: deal.dealId,
+      verificationChatId: Number(deal.verificationChatId),
+    });
+
+    if (result.action === 'released') {
+      await this.dealsService.updateDealStatus(deal.dealId, 'released', result.txHash);
+    } else if (result.action === 'refunded') {
+      await this.dealsService.updateDealStatus(deal.dealId, 'refunded', result.txHash);
+    }
+
+    return result;
+  }
+
   // ── Direct verify-and-register (pass-through to TEE) ──
 
   async verifyAndRegisterDeal(

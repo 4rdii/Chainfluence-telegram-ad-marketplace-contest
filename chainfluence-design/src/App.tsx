@@ -63,7 +63,7 @@ type Screen =
   | { type: 'notifications' }
   | { type: 'myCampaigns' }
   | { type: 'myOffers' }
-  | { type: 'payment'; dealId: number; amount: number; escrowAddress: string; dealLabel: string };
+  | { type: 'payment'; dealId: number; amount: number; feeAmount: number; escrowAddress: string; dealLabel: string; pendingRegistration?: Parameters<typeof api.deals.register>[0] };
 
 export default function App() {
   const [tonConnectUI] = useTonConnectUI();
@@ -464,7 +464,7 @@ export default function App() {
     if (!pricing) return;
 
     const fee = pricing.price * 0.05;
-    const totalAmount = pricing.price + fee;
+    const dealAmount = pricing.price - fee;
 
     // Generate a deal ID (in production, the backend assigns this)
     const dealId = Date.now() % 1_000_000;
@@ -481,15 +481,15 @@ export default function App() {
         '1/24': 86400, '2/48': 172800, '3/72': 259200, 'eternal': 0,
       };
       const duration = formatDurations[booking.format] || 86400;
-      const amountNano = Math.floor(totalAmount * 1_000_000_000).toString();
+      const amountNano = Math.floor(dealAmount * 1_000_000_000).toString();
 
       // Get the advertiser's connected wallet address
       const advertiserWallet = tonWallet?.account?.address
         ? tonWallet.account.address
         : undefined;
 
-      // Register the deal in the backend with escrow data + wallet addresses
-      await api.deals.register({
+      // Prepare registration data — only register after payment succeeds
+      const registrationData = {
         dealId,
         verificationChatId: parseInt(channel.id, 10),
         publisherId: parseInt(channel.publisherId, 10),
@@ -502,15 +502,17 @@ export default function App() {
         advertiserWallet,
         creativeText: booking.creativeText,
         creativeImages: booking.creativeImages,
-      });
+      };
 
-      dlog.info('Navigating to payment screen', { dealId, totalAmount, address });
+      dlog.info('Navigating to payment screen', { dealId, dealAmount, fee, address });
       setScreen({
         type: 'payment',
         dealId,
-        amount: totalAmount,
+        amount: dealAmount,
+        feeAmount: fee,
         escrowAddress: address,
         dealLabel: `${channel.name} - ${booking.format}`,
+        pendingRegistration: registrationData,
       });
     } catch (error) {
       dlog.error('Failed to book ad slot:', error);
@@ -562,16 +564,16 @@ export default function App() {
     };
     const duration = formatDurations[offer.format] || 86400;
 
-    // 7. Calculate amount in nanoTON (offer price + 5% fee)
+    // 7. Calculate amount in nanoTON (deal amount goes to escrow, fee separate)
     const fee = offer.price * 0.05;
-    const totalAmount = offer.price + fee;
-    const amountNano = Math.floor(totalAmount * 1_000_000_000).toString();
+    const dealAmount = offer.price - fee;
+    const amountNano = Math.floor(dealAmount * 1_000_000_000).toString();
 
     // 8. Get advertiser's wallet address
     const advertiserWallet = tonWallet?.account?.address || undefined;
 
-    // 9. Register the deal
-    await api.deals.register({
+    // 9. Prepare registration data — only register after payment succeeds
+    const registrationData = {
       dealId,
       verificationChatId: parseInt(offer.channelId, 10),
       publisherId: parseInt(offer.publisherId, 10),
@@ -583,25 +585,26 @@ export default function App() {
       contentHash: contentHashStr,
       advertiserWallet,
       creativeText: campaign.creativeText || undefined,
-      // Extract raw file IDs from adapted URLs (adaptCampaign already wrapped them)
       creativeImages: campaign.creativeImages.length > 0
         ? campaign.creativeImages.map((url: string) => {
             const parts = url.split('/uploads/');
             return parts.length > 1 ? decodeURIComponent(parts[parts.length - 1]) : url;
           })
         : undefined,
-    });
+    };
 
-    dlog.info('Deal registered from accepted offer, navigating to payment', { dealId, totalAmount, address });
+    dlog.info('Navigating to payment screen from accepted offer', { dealId, dealAmount, fee, address });
 
     // 10. Navigate to payment
     const channel = channels.find((c: Channel) => c.id === offer.channelId);
     setScreen({
       type: 'payment',
       dealId,
-      amount: totalAmount,
+      amount: dealAmount,
+      feeAmount: fee,
       escrowAddress: address,
       dealLabel: `${campaign.title} - ${channel?.name || offer.channelId}`,
+      pendingRegistration: registrationData,
     });
   };
 
@@ -700,11 +703,19 @@ export default function App() {
 
   /**
    * Called after the advertiser's deposit TX has been submitted.
-   * In the new flow, the advertiser does NOT sign here — they sign later
-   * via the Approve button after the channel owner has approved.
+   * NOW registers the deal in the backend (deferred from booking to avoid
+   * creating deals when the user cancels the wallet transaction).
    */
   const handlePaymentSent = async (dealId: number) => {
-    dlog.info(`Payment sent for dealId=${dealId}. Deal registered, awaiting channel owner approval.`);
+    // Register the deal now that payment has actually been sent
+    if (screen.type === 'payment' && screen.pendingRegistration) {
+      try {
+        await api.deals.register(screen.pendingRegistration);
+        dlog.info(`Payment sent & deal registered for dealId=${dealId}.`);
+      } catch (error) {
+        dlog.error(`Failed to register deal after payment for dealId=${dealId}:`, error);
+      }
+    }
     await loadDeals();
   };
 
@@ -914,6 +925,14 @@ export default function App() {
             onApproveDeal={handleApproveDeal}
             onRejectDeal={handleRejectDeal}
             onAdvertiserApprove={handleAdvertiserApprove}
+            onCheckDeal={async (deal) => {
+              const dealId = parseInt(deal.id, 10);
+              const result = await api.escrow.checkDeal(dealId);
+              dlog.info('checkDeal result:', result);
+              await loadDeals();
+              const fresh = await api.deals.getById(dealId);
+              setScreen({ type: 'dealDetail', deal: adaptDeal(fresh) });
+            }}
             onRefresh={async () => {
               const dealId = parseInt(screen.deal.id, 10);
               await loadDeals();
@@ -992,6 +1011,7 @@ export default function App() {
           <PaymentModal
             dealId={screen.dealId}
             amount={screen.amount}
+            feeAmount={screen.feeAmount}
             escrowAddress={screen.escrowAddress}
             dealLabel={screen.dealLabel}
             onPaymentSent={handlePaymentSent}
