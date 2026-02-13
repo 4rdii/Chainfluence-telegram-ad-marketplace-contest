@@ -85,13 +85,13 @@ export function DealCompletionScreen({
         )}
 
         {/* Details card */}
-        <div className="w-full bg-card border border-border rounded-2xl p-5 space-y-4">
+        <div className="w-full bg-card border border-border rounded-2xl p-6 space-y-5">
           {/* Channel */}
           <div className="flex items-center gap-3">
             <img
               src={channel.avatar}
               alt={channel.name}
-              className="w-10 h-10 rounded-full"
+              className="w-11 h-11 rounded-full"
             />
             <div>
               <p className="font-semibold">{channel.name}</p>
@@ -102,7 +102,7 @@ export function DealCompletionScreen({
           <div className="w-full h-px bg-border" />
 
           {/* Amount */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             {isReleased && (
               <>
                 <div className="flex items-center justify-between">
@@ -118,7 +118,7 @@ export function DealCompletionScreen({
                   </span>
                 </div>
                 <div className="w-full h-px bg-border" />
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between py-1">
                   <span className="text-sm font-semibold">Publisher received</span>
                   <span className="text-base font-bold text-[var(--success-green)]">
                     {publisherPayout} TON
@@ -135,7 +135,7 @@ export function DealCompletionScreen({
                   </span>
                 </div>
                 <div className="w-full h-px bg-border" />
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between py-1">
                   <span className="text-sm font-semibold">Advertiser refunded</span>
                   <span className="text-base font-bold text-[var(--pending-amber)]">
                     {deal.totalAmount} TON
@@ -148,23 +148,23 @@ export function DealCompletionScreen({
           <div className="w-full h-px bg-border" />
 
           {/* Transaction */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-2">Transaction</p>
+          <div className="py-1">
+            <p className="text-xs text-muted-foreground mb-3">Transaction</p>
             <button
               onClick={handleCopy}
               className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
             >
-              <span className="font-mono text-xs truncate max-w-[200px]">
+              <span className="font-mono text-xs break-all">
                 {deal.escrowAddress}
               </span>
               {copied ? (
-                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
               ) : (
-                <Copy className="w-3.5 h-3.5 flex-shrink-0" />
+                <Copy className="w-4 h-4 flex-shrink-0" />
               )}
             </button>
             {txHash && (
-              <button className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <button className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" />
                 View on TON Explorer
               </button>
@@ -175,9 +175,9 @@ export function DealCompletionScreen({
           {deal.completedAt && (
             <>
               <div className="w-full h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Completed</span>
-                <span className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between py-1">
+                <span className="text-sm text-muted-foreground">Completed</span>
+                <span className="text-sm text-muted-foreground">
                   {new Date(deal.completedAt).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
