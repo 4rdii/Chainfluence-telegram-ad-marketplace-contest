@@ -51,31 +51,33 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
     <div className="pb-20">
       {/* Header */}
       <div className="bg-card border-b border-border p-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo.svg" alt="Chainfluence" className="w-10 h-10" />
-            <h1 className="text-xl font-semibold">Chainfluence</h1>
+            <div>
+              <h1 className="text-xl font-semibold leading-tight">Chainfluence</h1>
+              <p className="text-xs text-muted-foreground">Trustless Telegram Advertising</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <WalletButton variant="compact" />
-            <button
-              onClick={onNotificationClick}
-              className="relative p-2 hover:bg-accent rounded-lg transition-colors"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-[var(--error-red)] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-          </div>
+          <button
+            onClick={onNotificationClick}
+            className="relative p-2 hover:bg-accent rounded-lg transition-colors"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 bg-[var(--error-red)] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
+          </button>
         </div>
-        <p className="text-sm text-muted-foreground">Trustless Telegram Advertising</p>
+        <div className="mt-3">
+          <WalletButton variant="compact" />
+        </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="p-4">
+      <div className="px-4 pt-5">
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -125,7 +127,8 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
 
       {/* Action Required */}
       {pendingActions.length > 0 && (
-        <div className="px-4 mb-6">
+        <div className="px-4 pt-5">
+          <div className="h-px bg-border mb-5" />
           <h2 className="text-lg font-semibold mb-3">Action Required</h2>
           <div className="space-y-3">
             {pendingActions.map((deal) => {
@@ -174,7 +177,8 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
       )}
 
       {/* Recent Activity */}
-      <div className="px-4">
+      <div className="px-4 pt-5">
+        <div className="h-px bg-border mb-5" />
         <h2 className="text-lg font-semibold mb-3">Recent Activity</h2>
         <div className="space-y-2">
           {notifications.slice(0, 5).map((notification) => {

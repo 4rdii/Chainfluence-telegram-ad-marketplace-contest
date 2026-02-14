@@ -61,7 +61,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   const isLive = status === 'POSTED';
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border ${getStatusStyles()} ${sizeClasses}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border whitespace-nowrap flex-shrink-0 ${getStatusStyles()} ${sizeClasses}`}>
       {isLive && (
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--error-red)] opacity-75" />

@@ -49,10 +49,13 @@ export function WalletButton({ variant = 'full' }: WalletButtonProps) {
 
     if (variant === 'compact') {
       return (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-[var(--success-green)]/10 text-[var(--success-green)] px-3 py-1.5 rounded-lg">
+        <div className="flex items-center justify-between bg-muted/30 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[var(--success-green)]" />
-            <span className="text-xs font-medium">Connected</span>
+            <span className="text-xs font-medium text-[var(--success-green)]">Connected</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              {truncateAddress(address)}
+            </span>
           </div>
           <button
             onClick={handleDisconnect}
@@ -113,10 +116,10 @@ export function WalletButton({ variant = 'full' }: WalletButtonProps) {
     return (
       <button
         onClick={handleConnect}
-        className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
       >
         <Wallet className="w-4 h-4" />
-        Connect
+        Connect TON Wallet
       </button>
     );
   }
