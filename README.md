@@ -1,113 +1,416 @@
-# Telegram Ad Marketplace
+# Chainfluence
 
-A decentralized advertising marketplace for Telegram channels, powered by TON blockchain and EigenCompute TEE for trustless escrow.
+**Trustless Telegram Advertising powered by TON Blockchain and EigenCompute TEE**
 
-## Overview
+Chainfluence is a trustless advertising marketplace for Telegram channels. Publishers (channel owners) and advertisers connect through a Telegram Mini App. Funds are held in TEE-managed escrow wallets — not by any centralized party — and are automatically released or refunded based on cryptographically verifiable conditions.
 
-Publishers (channel owners) and advertisers connect through this platform. Advertisers pay for ads using TON, with funds held in TEE-managed escrow until the ad duration is fulfilled.
+---
 
-### How It Works
+## Table of Contents
 
-1. **Agreement** - Publisher and advertiser agree on terms off-chain, both sign the deal parameters
-2. **Deposit** - Advertiser deposits TON to a deal-specific escrow address
-3. **Verification** - TEE verifies signatures, deposit, and posted content
-4. **Registration** - Deal is registered on-chain via the Deal Registry contract
-5. **Monitoring** - Backend periodically checks post status
-6. **Settlement** - TEE releases funds to publisher (success) or refunds advertiser (violation)
+- [How It Works](#how-it-works)
+- [Architecture](#architecture)
+- [Why This Design](#why-this-design)
+- [Component Overview](#component-overview)
+- [Deal Lifecycle](#deal-lifecycle)
+- [Trust Model](#trust-model)
+- [Security Design](#security-design)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Deployment](#deployment)
+- [Documentation](#documentation)
+- [License](#license)
+
+---
+
+## How It Works
+
+1. **Agreement** — Publisher and advertiser agree on terms (channel, ad format, price, duration). Both cryptographically sign the deal parameters using their TON wallets via TonConnect.
+2. **Deposit** — Advertiser deposits TON to a deal-specific escrow address derived by the TEE.
+3. **Posting** — Publisher posts the agreed ad content to their Telegram channel.
+4. **Verification** — TEE verifies both signatures, confirms deposit, validates post content via Telegram Bot API, and registers the deal on-chain.
+5. **Monitoring** — A backend scheduler periodically calls the TEE to check whether the post is still live and unmodified.
+6. **Settlement** — When the ad duration expires and content is verified intact, TEE releases funds to the publisher. If the content was removed or modified, TEE refunds the advertiser.
+
+No human intervention is needed for settlement. The TEE makes all release/refund decisions based on on-chain data and Telegram API verification.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Frontend   │────▶│   Backend   │────▶│     TEE     │
-│  (Telegram) │     │  (Polling)  │     │ (EigenComp) │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                    ┌──────────────────────────┼──────────────────────────┐
-                    │                          │                          │
-                    ▼                          ▼                          ▼
-            ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
-            │ Deal Registry│          │  HD Wallets  │          │  Bot API     │
-            │  (Contract)  │          │   (Escrow)   │          │ (Verify)     │
-            └──────────────┘          └──────────────┘          └──────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                   Telegram Mini App (Frontend)                      │
+│            React + TypeScript + TonConnect + Vite                    │
+│         Deal signing, wallet connect, UI for all workflows          │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ HTTPS
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Caddy (Reverse Proxy + TLS)                     │
+│              CORS handling, Cloudflare DNS, routing                  │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Backend (NestJS)                              │
+│                                                                     │
+│  Auth (Telegram Mini App initData validation + JWT)                 │
+│  Users, Channels, Campaigns, Offers, Deals, Reviews, Notifications  │
+│  Escrow Service (orchestrates signing flow, triggers TEE)           │
+│  Scheduler (every 10 min: calls TEE checkDeal for active deals)    │
+│                                                                     │
+│                    PostgreSQL (via Prisma ORM)                       │
+└───────────────────┬─────────────────────────────────────────────────┘
+                    │ HTTP
+                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│               TEE Service (EigenCompute)                             │
+│                                                                     │
+│  HD Wallet Derivation ── unique escrow address per deal             │
+│  TonConnect Signature Verification ── proves both parties agreed    │
+│  Telegram Bot API ── verifies post existence and content hash       │
+│  Fund Transfer ── release to publisher or refund to advertiser      │
+│  Contract Registration ── writes deal terms on-chain                │
+│                                                                     │
+└───────────────┬──────────────────────────┬──────────────────────────┘
+                │                          │
+                ▼                          ▼
+┌──────────────────────────┐  ┌──────────────────────────────────────┐
+│   Deal Registry          │  │   TEE-Derived Escrow Wallets         │
+│   (TON Smart Contract)   │  │   (One per deal, HD-derived)         │
+│                          │  │                                      │
+│   Stores deal metadata:  │  │   Advertiser deposits TON here.      │
+│   - channel, post IDs    │  │   TEE holds the private keys.        │
+│   - content hash         │  │   Funds transfer only when TEE       │
+│   - duration, parties    │  │   verifies conditions are met.       │
+│   - amounts              │  │                                      │
+│                          │  │   Admin wallet (index 0) pays gas    │
+│   Only TEE can write.    │  │   for contract registration.         │
+│   Anyone can read (free).│  │                                      │
+└──────────────────────────┘  └──────────────────────────────────────┘
 ```
 
-## Project Structure
+---
 
-```
-├── ton-deal-registry/     # TON smart contract (Tolk)
-│   ├── contracts/         # Deal Registry contract
-│   ├── wrappers/          # TypeScript wrapper
-│   └── tests/             # Contract tests
-│
-└── ton-escrow-tee/        # TEE service
-    ├── src/               # Service implementation
-    └── docs/              # Detailed documentation
-        ├── PRODUCT_DESIGN.md
-        ├── ROADMAP.md
-        └── SMART_CONTRACT_DESIGN.md
-```
+## Why This Design
 
-## Why EigenCompute TEE?
+### The Core Problem
 
-### The Problem
-
-Ad marketplace escrow needs to:
+An advertising escrow needs to:
 1. Hold funds securely until conditions are met
-2. Verify off-chain data (Telegram posts) that can't be accessed on-chain
+2. Verify off-chain data (Telegram posts) that smart contracts cannot access
 3. Execute automated release/refund based on real-world conditions
+4. Prove to both parties that the decision was fair
 
 ### Escrow Options Compared
 
 | Approach | Pros | Cons |
 |----------|------|------|
-| **Smart Contract Escrow** | Fully trustless | Can't verify Telegram content; complex on-chain logic |
-| **Centralized Backend** | Simple; can access APIs | Users must trust the operator |
-| **Multisig** | Distributed trust | Requires manual coordination; slow |
-| **Chainlink CRE** | Decentralized oracle network; battle-tested | No native TON support; higher latency; cost per request |
-| **TEE (EigenCompute)** | Can access APIs; verifiable execution; TON native | Requires TEE trust assumption |
+| **Smart Contract Escrow** | Fully trustless | Cannot verify Telegram content; complex on-chain logic |
+| **Centralized Backend** | Simple; can access APIs | Users must trust the operator completely |
+| **Multisig** | Distributed trust | Requires manual coordination; slow resolution |
+| **Oracle Network (Chainlink)** | Decentralized; battle-tested | No native TON support; high latency; per-request cost |
+| **TEE (EigenCompute)** | Can access APIs; verifiable execution; TON native | Requires TEE hardware trust assumption |
 
-### Why TEE Wins for This Use Case
+### Why TEE Wins
 
-1. **Off-chain Data Access** - TEE can call Telegram Bot API to verify posts exist and content matches
-2. **Verifiable Execution** - EigenCompute provides attestation that code ran correctly
-3. **Key Security** - Private keys never leave TEE; derived from KMS-provided mnemonic
-4. **Automation** - No manual intervention needed for release/refund
-5. **Cost Effective** - Invoked on-demand, pay only for compute time
-6. **TON Native** - Direct integration with TON blockchain without bridges
+The fundamental challenge is that ad verification requires **off-chain data** (does the Telegram post exist? does its content match?). Smart contracts cannot call external APIs. Oracles add latency and cost. A centralized backend requires full trust.
 
-### EigenCompute Specifics
+TEE provides the best tradeoff:
 
-- **KMS Integration** - Mnemonic injected at runtime, not stored
-- **Stateless** - TEE doesn't persist state; reads from blockchain
-- **Attestation** - Cryptographic proof of code integrity
-- **On-demand** - Spun up only when needed (deposit detected, check triggered)
+- **Off-chain data access** — TEE calls Telegram Bot API to verify posts exist and content matches the agreed hash.
+- **Verifiable execution** — EigenCompute provides attestation that the exact code ran correctly in a secure enclave.
+- **Key security** — Private keys for escrow wallets never leave the TEE. They are derived at runtime from a KMS-injected mnemonic.
+- **Automation** — No manual intervention needed. Release and refund happen automatically based on verifiable conditions.
+- **Cost effective** — TEE is invoked on-demand. No per-query oracle fees.
+- **TON native** — Direct integration with TON blockchain without bridges or wrappers.
 
-## Key Features
+### Why the Contract Only Stores Metadata
 
-- **Trustless Escrow** - Funds held in TEE-derived HD wallets, not custodial
-- **On-chain State** - Deal terms recorded on TON blockchain
-- **Content Verification** - TEE verifies posts via Telegram Bot API
-- **Signature-based Agreement** - Both parties must sign deal terms
-- **Automatic Settlement** - Release on success, refund on violation
+The Deal Registry contract does NOT hold funds. It only stores deal terms (channel, content hash, duration, parties, amounts). This is deliberate:
 
-## TEE Functions
+- **Simplicity** — The contract is ~100 lines of Tolk. Fewer lines = fewer bugs = smaller attack surface.
+- **Gas efficiency** — Registering a deal costs ~0.05 TON. A full escrow contract with release/refund logic would cost 3x more.
+- **Flexibility** — The TEE can implement complex verification logic (API calls, hash comparisons, timeouts) that would be impossible or prohibitively expensive on-chain.
+- **Transparency** — Anyone can read deal terms from the contract for free using `getDeal()`. The on-chain record proves what both parties agreed to.
 
-| Function | Description |
-|----------|-------------|
-| `createEscrowWallet(dealId)` | Derive deposit address for a deal |
-| `verifyAndRegisterDeal(input)` | Verify all conditions, register on-chain |
-| `checkDeal(dealId)` | Check status, release/refund if conditions met |
+The contract acts as an **immutable notary** — it timestamps and stores the agreement. The TEE acts as the **executor** — it holds funds and enforces the terms.
+
+### Why HD Wallets for Escrow
+
+Each deal gets a unique escrow address derived from a single master mnemonic using BIP-39 + SLIP-0010 (derivation path `m/44'/607'/index'/0'`):
+
+- **Deterministic** — Same mnemonic always produces the same wallets. TEE can be restarted without losing access.
+- **Isolated** — Each deal's funds are in a separate wallet. No commingling.
+- **Scalable** — Unlimited deals from one mnemonic. No key management overhead.
+- **Auditable** — Anyone can verify the escrow balance for a specific deal by checking its derived address.
+
+### Why Telegram Auth + JWT
+
+Users authenticate through Telegram Mini App's `initData`, which is HMAC-signed by Telegram's servers using the bot token. The backend validates this signature and issues a short-lived JWT. This means:
+
+- No separate login/password system needed
+- Identity is tied to Telegram account (natural for a Telegram marketplace)
+- JWT allows stateless API authentication after initial validation
+
+---
+
+## Component Overview
+
+### Frontend (`chainfluence-design/`)
+
+Telegram Mini App built with React, TypeScript, and Vite. Integrates TonConnect for wallet operations and deal signing. Contains all user-facing screens (home, channels, campaigns, deals, profile) and the deal signing cryptography that must match the TEE's verification exactly.
+
+See [docs/frontend.md](docs/frontend.md) for details.
+
+### Backend (`backend/`)
+
+NestJS application with Prisma ORM and PostgreSQL. Handles authentication, user/channel/campaign management, deal orchestration, and a cron scheduler that polls the TEE for deal status updates. Acts as the coordination layer between frontend and TEE — it does NOT make trust-critical decisions about funds.
+
+See [docs/backend.md](docs/backend.md) for details.
+
+### TEE Service (`ton-escrow-tee/`)
+
+Node.js service running inside an EigenCompute Trusted Execution Environment. Holds the master mnemonic, derives escrow wallets, verifies TonConnect signatures, checks Telegram post content, and executes fund transfers. This is the only component that touches private keys.
+
+See [docs/tee.md](docs/tee.md) for details.
+
+### Smart Contract (`ton-deal-registry/`)
+
+Minimal Tolk smart contract deployed on TON blockchain. Stores deal metadata (channel, post, content hash, duration, parties, amounts) with admin-only write access (only the TEE can register deals). Provides free getter functions for anyone to verify deal terms.
+
+See [docs/smart-contract.md](docs/smart-contract.md) for details.
+
+### Infrastructure
+
+- **Caddy** (`caddy/`) — Reverse proxy with automatic TLS, CORS handling, and routing
+- **Docker Compose** (`docker-compose.yml`) — Orchestrates PostgreSQL, backend, pgAdmin, and Caddy
+- **EigenCompute** — Hosts the TEE service with KMS-managed secrets
+
+---
+
+## Deal Lifecycle
+
+```
+                        ┌──────────┐
+                        │  CREATE  │  Advertiser initiates deal
+                        └────┬─────┘  Backend creates record, TEE derives escrow address
+                             │
+                             ▼
+                        ┌──────────┐
+                        │  DEPOSIT │  Advertiser sends TON to escrow address
+                        └────┬─────┘  (unique per deal, derived by TEE)
+                             │
+                    ┌────────┴────────┐
+                    ▼                 ▼
+              Both parties sign     Either party
+              deal params via       doesn't sign
+              TonConnect            within timeout
+                    │                 │
+                    ▼                 ▼
+              ┌──────────┐     ┌──────────┐
+              │ APPROVED │     │ REFUNDED │  12-hour deposit timeout
+              └────┬─────┘     └──────────┘  TEE auto-refunds
+                   │
+                   ▼
+              backend using GramJs posts ad
+              content to channel
+                   │
+                   ▼
+              ┌──────────────────┐
+              │ TEE VERIFICATION │  Verifies signatures, deposit,
+              └────┬─────────────┘  post content hash, registers on-chain
+                   │
+          ┌────────┴────────┐
+          ▼                 ▼
+     Verification      Verification
+     succeeds          fails
+          │                 │
+          ▼                 ▼
+     ┌──────────┐     ┌──────────┐
+     │ ON-CHAIN │     │ REFUNDED │  Auto-refund on any check failure
+     └────┬─────┘     └──────────┘
+          │
+          ▼
+     Scheduler checks every 10 min:
+     Is post still live? Content unchanged?
+          │
+     ┌────┴────────────────┐
+     ▼                     ▼
+  Duration expired     Content removed
+  + content valid      or modified
+     │                     │
+     ▼                     ▼
+┌──────────┐          ┌──────────┐
+│ RELEASED │          │ REFUNDED │
+└──────────┘          └──────────┘
+```
+
+### What Gets Verified
+
+| Check | Who Verifies | How |
+|-------|-------------|-----|
+| Both parties agreed to terms | TEE | TonConnect ed25519 signature verification |
+| Deposit amount is sufficient | TEE | Reads escrow wallet balance from blockchain |
+| Post exists on channel | TEE | Forwards message via Telegram Bot API |
+| Post content matches agreement | TEE | SHA-256 hash comparison |
+| Post stayed up for full duration | TEE + Scheduler | Periodic re-verification via Bot API |
+| Deal terms are immutable | Smart Contract | On-chain storage, anyone can verify |
+
+---
+
+## Trust Model
+
+| Component | What It Stores/Controls | Trust Level | Why |
+|-----------|------------------------|-------------|-----|
+| Smart Contract | Deal terms (immutable) | **Trustless** | On-chain, transparent, anyone can read |
+| TEE (EigenCompute) | Escrow private keys, fund transfers | **TEE-secured** | Hardware attestation, keys never leave enclave |
+| Backend (NestJS) | User profiles, creative content, deal coordination | **Backend-trusted** | No access to funds; only orchestrates workflow |
+| PostgreSQL | Off-chain metadata | **Backend-trusted** | Stores non-critical data (channels, notifications) |
+| Frontend | User interface, deal signing | **Client-side** | All critical operations verified server-side |
+
+### What the Backend Cannot Do
+
+The backend is intentionally limited. It **cannot**:
+- Move escrow funds (no access to private keys)
+- Register fake deals on-chain (only TEE is the contract admin)
+- Forge signatures (cryptographically bound to user wallets)
+- Lie to the TEE (TEE reads deal terms from blockchain, not from backend)
+
+The worst a compromised backend can do is refuse to serve the UI or delay deal processing. It cannot steal funds or create unauthorized deals.
+
+---
+
+## Security Design
+
+### Signature Flow
+
+Both parties sign the exact same deal parameters cell using TonConnect's `signData`:
+
+```
+Signed cell structure:
+  Main cell: dealId(64) | channelId(64) | contentHash(256) | duration(32)
+    ref[0] → publisher(address) | advertiser(address) | amount(coins)
+
+Envelope (what wallet actually signs):
+  prefix(32) | schemaHash(32) | timestamp(64) | signerAddress | domainCell | dealParamsCell
+```
+
+The TEE rebuilds this exact envelope and verifies the ed25519 signature against the signer's public key. It also checks that the public key corresponds to the claimed TON address (trying multiple wallet versions: V4R2, V5R1, V3R2, V3R1).
+
+**Important**: `postId` and `postedAt` are intentionally NOT signed. This allows both parties to sign before the ad is posted (better UX), with the TEE independently verifying post details afterward.
+
+### Content Hash Verification
+
+The content hash is SHA-256 of the post text/caption. The frontend computes this hash when the deal is created, both parties sign it, and the TEE verifies it matches the actual post content fetched via Telegram Bot API.
+
+### Deposit Timeout
+
+If a deal is never registered on-chain (e.g., verification fails or parties never sign), the TEE implements a 12-hour timeout. After 12 hours, funds are automatically returned to the original depositor. The TEE reads the transaction history from the blockchain to identify the sender — no database dependency.
+
+### TEE Isolation
+
+- The master mnemonic is injected via EigenCompute KMS at runtime — never stored on disk
+- The TEE is stateless — it re-derives wallets and re-reads blockchain state on every call
+- EigenCompute provides cryptographic attestation that the exact published code is running
+
+---
+
+## Project Structure
+
+```
+chainfluence/
+├── backend/                    # NestJS API server
+│   ├── src/
+│   │   ├── auth/               # Telegram Mini App auth + JWT
+│   │   ├── users/              # User profiles and wallet linking
+│   │   ├── channels/           # Publisher channel registration
+│   │   ├── campaigns/          # Advertiser campaign management
+│   │   ├── offers/             # Publisher offers on campaigns
+│   │   ├── deals/              # Deal CRUD and status management
+│   │   ├── escrow/             # Signing flow orchestration, TEE proxy
+│   │   ├── tee/                # TEE HTTP client + deal check scheduler
+│   │   ├── notifications/      # In-app notification system
+│   │   ├── reviews/            # Post-deal rating system
+│   │   ├── telegram/           # Telegram Bot API + GramJS integration
+│   │   ├── uploads/            # File upload handling
+│   │   ├── health/             # Health check endpoints
+│   │   ├── prisma/             # Database client
+│   │   ├── config/             # Environment validation
+│   │   └── logger/             # Logging service
+│   ├── prisma/
+│   │   └── schema.prisma       # Database schema
+│   └── Dockerfile
+│
+├── ton-escrow-tee/             # TEE service (runs in EigenCompute)
+│   ├── src/
+│   │   ├── index.ts            # HTTP API (Express)
+│   │   ├── tee-service.ts      # Core escrow logic
+│   │   ├── wallet.ts           # HD wallet derivation (BIP-39/SLIP-0010)
+│   │   ├── signature.ts        # TonConnect signature verification
+│   │   ├── bot-api.ts          # Telegram content verification
+│   │   ├── deal-registry.ts    # Smart contract interaction
+│   │   ├── ton-client.ts       # TON blockchain client with retry
+│   │   └── types.ts            # Type definitions
+│   └── Dockerfile
+│
+├── ton-deal-registry/          # TON smart contract
+│   ├── contracts/
+│   │   └── deal_registry.tolk  # Tolk contract source
+│   ├── wrappers/
+│   │   └── DealRegistry.ts     # TypeScript wrapper
+│   ├── tests/
+│   │   └── DealRegistry.spec.ts
+│   └── scripts/
+│       └── deployDealRegistry.ts
+│
+├── chainfluence-design/        # Telegram Mini App frontend
+│   ├── src/
+│   │   ├── App.tsx             # Main app + screen navigation
+│   │   ├── lib/                # API client, auth, deal signing, adapters
+│   │   ├── components/         # UI components and screen views
+│   │   └── types/              # Frontend type definitions
+│   └── public/
+│       └── tonconnect-manifest.json
+│
+├── caddy/                      # Reverse proxy
+│   ├── Caddyfile               # Routing + TLS config
+│   └── Dockerfile
+│
+├── tests/                      # Integration tests
+│   ├── integration/            # TEE + contract integration tests
+│   └── unit/                   # Wallet derivation tests
+│
+├── scripts/                    # Utility scripts
+├── docker-compose.yml          # Local development orchestration
+├── Makefile                    # Build shortcuts
+└── docs/                       # Component documentation
+    ├── frontend.md
+    ├── backend.md
+    ├── tee.md
+    └── smart-contract.md
+```
+
+---
 
 ## Getting Started
 
-### Deal Registry Contract
+### Prerequisites
+
+- Node.js 18+
+- Docker and Docker Compose
+- A Telegram bot token (from @BotFather)
+- TON testnet wallet with test TON
+
+### Smart Contract
 
 ```bash
 cd ton-deal-registry
 npm install
-npm run build
-npm test
+npx blueprint build    # Compile Tolk contract
+npx blueprint test     # Run contract tests
+npx blueprint run      # Deploy to testnet
 ```
 
 ### TEE Service
@@ -115,101 +418,129 @@ npm test
 ```bash
 cd ton-escrow-tee
 npm install
+cp .env.example .env
+# Set: MNEMONIC, BOT_TOKEN, DEAL_REGISTRY_ADDRESS, TESTNET=true
 npm run dev
 ```
 
+### Backend
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Set: DATABASE_URL, TELEGRAM_BOT_TOKEN, TEE_URL, JWT_SECRET
+npx prisma generate
+npx prisma migrate deploy
+npm run start:dev
+```
+
+### Frontend
+
+```bash
+cd chainfluence-design
+npm install
+# Set VITE_API_BASE_URL in .env
+npm run dev
+```
+
+### Full Stack (Docker)
+
+```bash
+# Set environment variables in backend/.env
+docker compose up -d
+```
+
+---
+
+## Deployment
+
+### Backend + Database
+
+Docker Compose deploys PostgreSQL, the NestJS backend, pgAdmin, and Caddy. The Caddy reverse proxy handles TLS termination using Cloudflare DNS challenge.
+
+```bash
+make up                    # Start all services
+make build-backend-and-up  # Rebuild backend and start
+```
+
+### TEE Service (EigenCompute)
+
+```bash
+cd ton-escrow-tee
+docker build -t docker.io/<user>/ton-escrow-tee:latest .
+docker push docker.io/<user>/ton-escrow-tee:latest
+ecloud compute app upgrade <app-id> --image-ref docker.io/<user>/ton-escrow-tee:latest
+```
+
+Environment variables (`MNEMONIC`, `BOT_TOKEN`, etc.) are managed through EigenCompute KMS — they are injected at runtime and never stored on disk.
+
+### Smart Contract
+
+Deployed once to TON mainnet/testnet using Blueprint:
+
+```bash
+cd ton-deal-registry
+npx blueprint run deployDealRegistry
+```
+
+The contract address is then configured in both the TEE service (`DEAL_REGISTRY_ADDRESS`) and can be verified by anyone on-chain.
+
+### Frontend
+
+Deployed as static files to Vercel (or any static host):
+
+```bash
+cd chainfluence-design
+npm run build
+# Deploy build/ directory
+```
+
+---
+
+## Environment Variables
+
+### Backend
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `TELEGRAM_BOT_TOKEN` | Yes | Telegram Bot API token |
+| `JWT_SECRET` | Yes | Secret for JWT signing (min 32 chars) |
+| `TEE_URL` | Yes | URL of the TEE service |
+| `PORT` | No | Server port (default: 3000) |
+| `TELEGRAM_API_ID` | No | For GramJS MTProto (advanced channel stats) |
+| `TELEGRAM_API_HASH` | No | For GramJS MTProto |
+
+### TEE Service
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MNEMONIC` | Yes | Master mnemonic for HD wallet derivation (SECRET) |
+| `BOT_TOKEN` | Yes | Telegram Bot API token for content verification |
+| `DEAL_REGISTRY_ADDRESS` | Yes | TON address of Deal Registry contract |
+| `TESTNET` | No | Set to "true" for testnet (default: mainnet) |
+| `PORT` | No | Server port (default: 3000) |
+| `TONCENTER_API_KEY` | No | TON Center API key for higher rate limits |
+
+### Frontend
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_API_BASE_URL` | Yes | Backend API URL |
+
+---
+
 ## Documentation
 
-See [ton-escrow-tee/docs/](ton-escrow-tee/docs/) for detailed documentation:
+Detailed per-component documentation is in the [docs/](docs/) folder:
 
-- [Product Design](ton-escrow-tee/docs/PRODUCT_DESIGN.md) - Full system design
-- [Roadmap](ton-escrow-tee/docs/ROADMAP.md) - Development milestones
-- [Smart Contract Design](ton-escrow-tee/docs/SMART_CONTRACT_DESIGN.md) - Contract architecture
+- [Frontend](docs/frontend.md) — Mini App architecture, screens, deal signing
+- [Backend](docs/backend.md) — API structure, auth flow, database schema, scheduler
+- [TEE Service](docs/tee.md) — Escrow logic, wallet derivation, signature verification, content checks
+- [Smart Contract](docs/smart-contract.md) — Contract design, cell structure, security properties
 
-## TODO
-
-### Refactor: Make checkPostStatus Use Contract Data
-
-- [ ] **Refactor `checkPostStatus` to always fetch from contract**
-
-  **Current Issue:** `checkPostStatus` accepts `channelId`, `postId`, and `contentHash` as parameters. This creates inconsistency:
-  - In `verifyAndRegisterDeal`: Uses user-provided params (not yet on-chain)
-  - In `checkDeal`: Uses contract data (source of truth)
-
-  **Solution:** Create a clear separation between low-level and high-level verification:
-  1. Keep `verifyContent()` in `bot-api.ts` - Low-level method that takes explicit parameters
-  2. Create `checkDealStatus()` in `tee-service.ts` - High-level method that fetches from contract
-
-  **Implementation:**
-  ```typescript
-  // In tee-service.ts
-  async checkDealStatus(dealId: number, verificationChatId: number) {
-    // 1. Fetch deal from contract (source of truth)
-    const contract = this.client.open(this.dealRegistry);
-    const deal = await contract.getDeal(BigInt(dealId));
-
-    if (!deal) {
-      throw new Error('Deal not found in registry');
-    }
-
-    // 2. Verify using contract data
-    return await this.botApi.checkPostStatus(
-      deal.channelId,
-      deal.postId,
-      deal.contentHash,
-      verificationChatId
-    );
-  }
-  ```
-
-  **Files to modify:**
-  - `ton-escrow-tee/src/tee-service.ts` - Add `checkDealStatus()` method
-  - Update `checkDeal()` to use the new method
-  - Keep `verifyAndRegisterDeal()` using direct params (since deal not registered yet)
-
-  **Why this matters:**
-  - All fields (channelId, postId, contentHash) ARE stored in contract (lines 209-211 of tee-service.ts)
-  - Contract is the single source of truth after registration
-  - Prevents potential security issues from accepting user-provided data
-
-### Code Cleanup
-
-- [ ] **Remove unused `createSenderFromWallet` function**
-
-  **Issue:** The `createSenderFromWallet()` helper function in `ton-escrow-tee/src/deal-registry.ts` (lines 96-121) is defined but never used anywhere in the codebase.
-
-  **Current situation:**
-  - The function was created to provide a cleaner way to interact with contract methods
-  - The TEE service manually builds and sends transactions instead (tee-service.ts:160-178)
-  - No tests or other code references this function
-
-  **Action:** Remove the dead code from `ton-escrow-tee/src/deal-registry.ts`
-
-  **Alternative:** If cleaner contract interactions are desired, refactor `tee-service.ts` to use this helper instead of manual transaction building.
-
-### Image Verification Enhancement
-
-- [ ] **Implement hybrid hash approach for image posts**
-
-  **Current Issue:** The TEE only hashes text/caption content. Image-only posts (without captions) result in empty string hashes, making them unverifiable.
-
-  **Solution:** Implement a hybrid content hashing approach that combines:
-  - `file_unique_id` - Telegram's stable file identifier
-  - `file_size` - File size in bytes
-  - `caption` - Optional text caption (if present)
-
-  **Implementation Notes:**
-  - Update `computeContentHash()` in `ton-escrow-tee/src/bot-api.ts` to handle `Message` objects with photos
-  - When `message.photo` exists, extract the largest photo size (`photo[photo.length - 1]`)
-  - Create combined hash: `SHA256(file_unique_id + file_size + (caption || ''))`
-  - This avoids downloading full images while still providing content verification
-  - Update frontend to compute the same hash when creating deals for image posts
-
-  **Files to modify:**
-  - `ton-escrow-tee/src/bot-api.ts` - Add photo handling to `computeContentHash()`
-  - Frontend deal creation - Match the hash computation logic
-
-  **Alternative (more robust but slower):** Download actual image bytes and hash them using `getFile` + `downloadFile` APIs. This provides true content verification but requires more bandwidth.
+---
 
 ## License
 
