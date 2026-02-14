@@ -15,6 +15,8 @@ Chainfluence is a trustless advertising marketplace for Telegram channels. Publi
 - [Deal Lifecycle](#deal-lifecycle)
 - [Trust Model](#trust-model)
 - [Security Design](#security-design)
+- [Current Known Limitations](#current-known-limitations)
+- [Future Thoughts](#future-thoughts)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Deployment](#deployment)
@@ -314,6 +316,79 @@ If a deal is never registered on-chain (e.g., verification fails or parties neve
 - The master mnemonic is injected via EigenCompute KMS at runtime — never stored on disk
 - The TEE is stateless — it re-derives wallets and re-reads blockchain state on every call
 - EigenCompute provides cryptographic attestation that the exact published code is running
+
+---
+
+## Current Known Limitations
+
+Chainfluence intentionally pushes trust-critical execution into a TEE so it can verify Telegram data and move funds without a centralized custodian. That design comes with explicit limitations and operational risks.
+
+- **TEE code is upgradeable by the operator (us).**  
+  If we can deploy new enclave code at any time, we can change release/refund logic, verification rules, or key handling. Attestation only proves “this code ran,” not “this code is what you expected,” unless clients actively verify the measurement against an allowlist.
+
+- **TEE downtime can freeze settlement.**  
+  If the TEE is unavailable, deals cannot be verified, registered, released, or refunded. Funds are in TEE-controlled escrow wallets; downtime turns “trustless automation” into “paused automation.” In prolonged outages, users may experience frozen funds until service is restored.
+
+---
+
+## Future Thoughts
+
+Chainfluence is designed to work end-to-end today, but the long-term goal is to reduce remaining trust/ops assumptions and expand the marketplace into a more expressive “ad protocol” on top of Telegram + TON.
+
+### Addressing Known Limitations
+
+#### Upgradeability
+
+EigenCompute is explicitly moving toward stronger guarantees around *what code is actually running*. In particular, EigenCompute’s **Verifiable Execution** and **Verifiable Builds** are intended to close the gap between “a TEE ran” and “the expected code ran”:
+
+- Verifiable Execution: https://docs.eigencloud.xyz/eigencompute/concepts/trust-guarantees  
+- Verifiable Builds: https://docs.eigencloud.xyz/eigencompute/concepts/verifiable-builds  
+
+In addition to platform guarantees, we plan to evolve governance over time:
+
+- **Start centralized, evolve to DAO-controlled upgrades.**  
+  Initially, upgrades are managed by the team for speed of iteration. Over time, we plan to introduce a DAO (with a governance token) where protocol upgrades and configuration changes require **majority vote**.
+
+- **DAO as the “admin” for upgrade decisions.**  
+  The goal is that “who decides upgrades” is no longer a single operator decision. Instead, governance controls which enclave measurement(s) are approved for production, and what policy changes are allowed (e.g., timeouts, verification rules, deal types).
+
+- **Public upgrade visibility.**  
+  As governance matures, upgrades will be published with transparent metadata (commit hash / build provenance / measurement identifiers), so users can verify what version is active and when changes occurred.
+
+#### Downtime
+
+TEE downtime can freeze verification and settlement, so we want to reduce “operator uptime” from a hidden risk to an explicit, monitorable guarantee:
+
+- **Prepaid TEE commitments + periodic proofs.**  
+  We plan to keep the TEE service paid in advance (e.g., one year), and publish periodic attestations/proofs that the service is funded and scheduled to remain active. This does not eliminate all downtime risk, but it narrows the most common failure mode: “service stopped because the operator failed to maintain it.”
+
+- **Operational hardening (reliability over heroics).**  
+  We aim to add redundant deployment practices (health checks, automated restarts, alerting) so failures are detected and corrected quickly, with minimal time spent in “frozen settlement” states.
+
+### Advancing the Protocol
+
+Beyond hardening limitations, there are several product/protocol directions that can materially expand Chainfluence adoption and capability:
+
+- **Bootstrap as a channel indexer (not just a middleman).**  
+  Early on, we can act as a discovery layer: help advertisers find high-quality channels using structured channel metadata and performance signals, even before they run full escrowed campaigns.
+
+- **Bring supply first: influencers + large channels.**  
+  We plan to actively partner with influencers and large publishers to seed the marketplace, so advertisers see immediate inventory and publishers see real demand from day one.
+
+- **Support more assets and payments.**  
+  Add support for more tokens—especially stablecoins—to reduce volatility exposure, and explore cross-chain payments so advertisers can fund deals from other ecosystems while settling cleanly into TON escrow.
+
+- **Richer deal types.**  
+  Expand beyond fixed-price posts into:
+  - **Auctions** (bid for a slot),
+  - **time-based pricing** (premium rates during peak engagement windows),
+  - and **staking-based offers** (token-staked guarantees, discounts, or prioritized placement).
+
+- **DAO token: governance + possible utility.**  
+  The governance token can serve as the coordination mechanism for upgrades and policy changes. Over time, it may also support utility features (e.g., staking to access premium inventory, fee discounts, or spam resistance), if the market demands it.
+
+- **Privacy (if users demand it).**  
+  If deal privacy becomes a priority, we can explore ways to reduce public exposure of sensitive terms while preserving verifiability (e.g., selective disclosure or commitment-based publishing of deal terms).
 
 ---
 
