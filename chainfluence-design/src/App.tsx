@@ -832,7 +832,7 @@ export default function App() {
         {screen.type === 'loading' && (
           <div className="flex flex-col items-center justify-center min-h-screen gap-6">
             <div className="animate-pulse">
-              <img src="/logo.svg" alt="Chainfluence" className="w-20 h-20" />
+              <img src="/logo.svg" alt="Chainfluence" className="w-40 h-40" />
             </div>
             <div className="flex flex-col items-center gap-2">
               <h1 className="text-xl font-bold">Chainfluence</h1>
