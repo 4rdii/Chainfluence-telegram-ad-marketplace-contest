@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Campaign, ChannelCategory } from '../../types';
 import { CampaignCard } from '../CampaignCard';
-import { Search, SlidersHorizontal, Plus } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, FolderOpen } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 
@@ -9,11 +9,12 @@ interface CampaignsScreenProps {
   campaigns: Campaign[];
   onCampaignClick: (campaign: Campaign) => void;
   onCreateCampaign: () => void;
+  onMyCampaigns: () => void;
   userRole: 'publisher' | 'advertiser' | 'both';
   currentUserId?: string;
 }
 
-export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, userRole, currentUserId }: CampaignsScreenProps) {
+export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, onMyCampaigns, userRole, currentUserId }: CampaignsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<ChannelCategory[]>([]);
@@ -31,6 +32,7 @@ export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, 
 
   const filteredCampaigns = campaigns
     .filter(c => c.status === 'active')
+    .filter(c => !currentUserId || c.advertiserId !== currentUserId)
     .filter(campaign => {
       const matchesSearch = 
         campaign.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -83,14 +85,24 @@ export function CampaignsScreen({ campaigns, onCampaignClick, onCreateCampaign, 
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-xl font-semibold">Browse Campaigns</h1>
           {userRole === 'both' && (
-            <Button
-              size="sm"
-              onClick={onCreateCampaign}
-              className="bg-primary text-primary-foreground"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Create
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onMyCampaigns}
+              >
+                <FolderOpen className="w-4 h-4 mr-1" />
+                Manage
+              </Button>
+              <Button
+                size="sm"
+                onClick={onCreateCampaign}
+                className="bg-primary text-primary-foreground"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Create
+              </Button>
+            </div>
           )}
         </div>
         

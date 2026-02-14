@@ -8,9 +8,10 @@ import { Button } from '../ui/button';
 interface ChannelsScreenProps {
   channels: Channel[];
   onChannelClick: (channel: Channel) => void;
+  currentUserId?: string;
 }
 
-export function ChannelsScreen({ channels, onChannelClick }: ChannelsScreenProps) {
+export function ChannelsScreen({ channels, onChannelClick, currentUserId }: ChannelsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<ChannelCategory[]>([]);
@@ -26,7 +27,7 @@ export function ChannelsScreen({ channels, onChannelClick }: ChannelsScreenProps
     );
   };
 
-  const filteredChannels = channels.filter(channel => {
+  const filteredChannels = channels.filter(c => !currentUserId || c.publisherId !== currentUserId).filter(channel => {
     const matchesSearch = 
       channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       channel.username.toLowerCase().includes(searchQuery.toLowerCase());

@@ -21,10 +21,9 @@ import { DealCompletionScreen } from './components/screens/DealCompletionScreen'
 import { PaymentModal } from './components/screens/PaymentModal';
 import {
   mockUser,
-  mockNotifications,
   mockOffers
 } from './lib/mock-data';
-import { Channel, Campaign, Deal, Offer, UserRole, User } from './types';
+import { Channel, Campaign, Deal, Offer, UserRole, User, Notification } from './types';
 import { getTelegramUser, initTelegramWebApp, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
 import { api } from './lib/api';
 import { authenticateWithTelegram } from './lib/auth';
@@ -63,7 +62,7 @@ type Screen =
   | { type: 'notifications' }
   | { type: 'myCampaigns' }
   | { type: 'myOffers' }
-  | { type: 'payment'; dealId: number; amount: number; feeAmount: number; escrowAddress: string; dealLabel: string; pendingRegistration?: Parameters<typeof api.deals.register>[0] };
+  | { type: 'payment'; dealId: number; amount: number; feeAmount: number; escrowAddress: string; dealLabel: string; pendingRegistration?: Parameters<typeof api.deals.register>[0]; pendingOfferId?: number };
 
 export default function App() {
   const [tonConnectUI] = useTonConnectUI();
@@ -71,7 +70,7 @@ export default function App() {
 
   const [screen, setScreen] = useState<Screen>({ type: 'loading' });
   const [user, setUser] = useState<User>(mockUser);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -132,7 +131,7 @@ export default function App() {
     try {
       const data = await api.notifications.list();
       dlog.info(`Loaded ${data.length} notifications`);
-      if (data.length > 0) setNotifications(data.map(adaptNotification));
+      setNotifications(data.map(adaptNotification));
     } catch (e) { dlog.warn('loadNotifications failed:', e); }
   }, []);
 
@@ -236,9 +235,11 @@ export default function App() {
             setScreen({ type: 'tab', tab: 'deals' });
             break;
           case 'addChannel':
-          case 'myCampaigns':
           case 'myOffers':
             setScreen({ type: 'tab', tab: 'profile' });
+            break;
+          case 'myCampaigns':
+            setScreen({ type: 'tab', tab: 'campaigns' });
             break;
           case 'notifications':
             setScreen({ type: 'tab', tab: 'home' });
@@ -542,11 +543,7 @@ export default function App() {
    * Mirrors handleBookAdSlot: accept offer → create escrow → register deal → payment.
    */
   const handleAcceptOffer = async (offer: Offer) => {
-    // 1. Accept the offer on the backend
-    await api.offers.accept(parseInt(offer.id));
-    dlog.info(`Offer ${offer.id} accepted`);
-
-    // 2. Look up the campaign to get creative data
+    // 1. Look up the campaign to get creative data
     const campaign = campaigns.find((c: Campaign) => c.id === offer.campaignId);
     if (!campaign) throw new Error('Campaign not found');
 
@@ -606,6 +603,7 @@ export default function App() {
       escrowAddress: address,
       dealLabel: `${campaign.title} - ${channel?.name || offer.channelId}`,
       pendingRegistration: registrationData,
+      pendingOfferId: parseInt(offer.id),
     });
   };
 
@@ -708,13 +706,24 @@ export default function App() {
    * creating deals when the user cancels the wallet transaction).
    */
   const handlePaymentSent = async (dealId: number) => {
-    // Register the deal now that payment has actually been sent
-    if (screen.type === 'payment' && screen.pendingRegistration) {
-      try {
-        await api.deals.register(screen.pendingRegistration);
-        dlog.info(`Payment sent & deal registered for dealId=${dealId}.`);
-      } catch (error) {
-        dlog.error(`Failed to register deal after payment for dealId=${dealId}:`, error);
+    if (screen.type === 'payment') {
+      // Accept the offer now that payment has actually been sent
+      if (screen.pendingOfferId) {
+        try {
+          await api.offers.accept(screen.pendingOfferId);
+          dlog.info(`Offer ${screen.pendingOfferId} accepted after payment for dealId=${dealId}`);
+        } catch (error) {
+          dlog.error(`Failed to accept offer ${screen.pendingOfferId} after payment:`, error);
+        }
+      }
+      // Register the deal now that payment has actually been sent
+      if (screen.pendingRegistration) {
+        try {
+          await api.deals.register(screen.pendingRegistration);
+          dlog.info(`Payment sent & deal registered for dealId=${dealId}.`);
+        } catch (error) {
+          dlog.error(`Failed to register deal after payment for dealId=${dealId}:`, error);
+        }
       }
     }
     await loadDeals();
@@ -860,6 +869,7 @@ export default function App() {
           <ChannelsScreen
             channels={channels}
             onChannelClick={handleChannelClick}
+            currentUserId={user.id}
           />
         )}
 
@@ -868,6 +878,7 @@ export default function App() {
             campaigns={campaigns}
             onCampaignClick={handleCampaignClick}
             onCreateCampaign={handleCreateCampaign}
+            onMyCampaigns={handleMyCampaigns}
             userRole={getUserRole()}
             currentUserId={user.id}
           />
@@ -992,7 +1003,7 @@ export default function App() {
         {screen.type === 'myCampaigns' && (
           <MyCampaignsScreen
             campaigns={userCampaigns}
-            onBack={() => handleBackToTab('profile')}
+            onBack={() => handleBackToTab('campaigns')}
             onCampaignClick={handleCampaignClick}
             onCreateCampaign={handleCreateCampaign}
             onPause={handlePauseCampaign}
