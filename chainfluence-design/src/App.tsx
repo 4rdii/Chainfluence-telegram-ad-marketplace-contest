@@ -19,10 +19,6 @@ import { MyCampaignsScreen } from './components/screens/MyCampaignsScreen';
 import { MyOffersScreen } from './components/screens/MyOffersScreen';
 import { DealCompletionScreen } from './components/screens/DealCompletionScreen';
 import { PaymentModal } from './components/screens/PaymentModal';
-import {
-  mockUser,
-  mockOffers
-} from './lib/mock-data';
 import { Channel, Campaign, Deal, Offer, UserRole, User, Notification } from './types';
 import { getTelegramUser, initTelegramWebApp, showBackButton, hideBackButton, hapticImpact } from './lib/telegram';
 import { api } from './lib/api';
@@ -31,6 +27,8 @@ import { computeContentHash, signDealWithTonConnect, type DealParamsForSigning }
 import { adaptUser, adaptChannel, adaptCampaign, adaptDeal, adaptOffer, adaptNotification } from './lib/adapters';
 import { DebugPanel } from './components/DebugPanel';
 import { dlog } from './lib/debug-log';
+
+const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE === 'true';
 
 // Fallback: create user from Telegram data (no backend)
 function createUserFromTelegram(): User | null {
@@ -69,12 +67,20 @@ export default function App() {
   const tonWallet = useTonWallet();
 
   const [screen, setScreen] = useState<Screen>({ type: 'loading' });
-  const [user, setUser] = useState<User>(mockUser);
+  const [user, setUser] = useState<User>({
+    id: '',
+    username: '',
+    displayName: '',
+    avatar: '',
+    roles: [],
+    walletBalance: 0,
+    memberSince: '',
+  });
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [offers, setOffers] = useState(mockOffers);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [campaignOffers, setCampaignOffers] = useState<Offer[]>([]);
 
   // ── Data loaders ──
@@ -139,7 +145,7 @@ export default function App() {
     try {
       const data = await api.offers.getMine();
       dlog.info(`Loaded ${data.length} offers`);
-      if (data.length > 0) setOffers(data.map(adaptOffer));
+      setOffers(data.map(adaptOffer));
     } catch (e) { dlog.warn('loadOffers failed:', e); }
   }, []);
 
@@ -1058,7 +1064,7 @@ export default function App() {
       )}
 
       {/* Debug panel — tap the bug button to see logs */}
-      <DebugPanel />
+      {DEBUG_MODE && <DebugPanel />}
     </div>
   );
 }

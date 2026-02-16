@@ -1,8 +1,10 @@
 /**
  * In-app debug logger for Telegram Mini App.
  * Stores log entries in memory so they can be rendered on screen.
- * Also mirrors to console.log for local dev.
+ * Controlled by VITE_DEBUG_MODE env variable.
  */
+
+const DEBUG_ENABLED = import.meta.env.VITE_DEBUG_MODE === 'true';
 
 export interface LogEntry {
   time: string;
@@ -19,6 +21,8 @@ function now(): string {
 }
 
 function push(level: LogEntry['level'], ...args: unknown[]) {
+  if (!DEBUG_ENABLED) return;
+
   const message = args.map(a => {
     if (a instanceof Error) return `${a.name}: ${a.message}`;
     if (typeof a === 'object') {
@@ -46,4 +50,5 @@ export const dlog = {
   getEntries: () => [...entries],
   subscribe: (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn); },
   clear: () => { entries.length = 0; listeners.forEach(fn => fn()); },
+  isEnabled: () => DEBUG_ENABLED,
 };

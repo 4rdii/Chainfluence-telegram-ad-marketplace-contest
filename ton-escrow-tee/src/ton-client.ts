@@ -1,6 +1,4 @@
 import { TonClient } from '@ton/ton';
-import { Address } from '@ton/core';
-
 // Default endpoints
 const MAINNET_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC';
 const TESTNET_ENDPOINT = 'https://testnet.toncenter.com/api/v2/jsonRPC';
@@ -53,32 +51,4 @@ export async function withRetry<T>(
     }
   }
   throw new Error('Max retries exceeded');
-}
-
-/**
- * Wait for a transaction to be confirmed
- */
-export async function waitForTransaction(
-  client: TonClient,
-  address: Address,
-  expectedSeqno: number,
-  timeoutMs: number = 60000
-): Promise<boolean> {
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      const state = await client.getContractState(address);
-      if (state.state === 'active') {
-        // Check if seqno has advanced
-        // This is a simplified check - in production you'd verify the specific transaction
-        return true;
-      }
-    } catch {
-      // Continue waiting
-    }
-    await sleep(2000);
-  }
-
-  return false;
 }

@@ -1,6 +1,3 @@
-/* eslint-disable no-console */
-declare const console: { log(...args: unknown[]): void };
-
 import { signVerify } from '@ton/crypto';
 import { beginCell, Cell, Address } from '@ton/core';
 import { WalletContractV3R1, WalletContractV3R2, WalletContractV4, WalletContractV5R1 } from '@ton/ton';
@@ -135,24 +132,12 @@ export function verifyTonConnectSignature(
   domain: string,
   schemaHash: number = DEAL_PARAMS_SCHEMA_HASH,
 ): { valid: boolean; error?: string } {
-  console.log('[SIG] verifyTonConnectSignature called');
-  console.log('[SIG] signature length:', signature.length, 'hex:', signature.toString('hex').substring(0, 32) + '...');
-  console.log('[SIG] publicKey length:', publicKey.length, 'hex:', publicKey.toString('hex'));
-  console.log('[SIG] expectedAddress:', expectedAddress.toString());
-  console.log('[SIG] timestamp:', timestamp, 'domain:', domain, 'schemaHash:', schemaHash);
-
   // 1. Check pubkey vs address (informational — custodial wallets like Telegram Wallet
   //    use a signing key that doesn't derive to the wallet address)
-  const addrMatch = verifyPublicKeyMatchesAddress(publicKey, expectedAddress);
-  if (addrMatch) {
-    console.log('[SIG] pubkey matches address');
-  } else {
-    console.log('[SIG] WARN: pubkey does not derive to expected address (custodial wallet?)');
-  }
+  verifyPublicKeyMatchesAddress(publicKey, expectedAddress);
 
   // 2. Build deal params Cell
   const dealParamsCell = buildDealParamsCell(params);
-  console.log('[SIG] dealParamsCell hash:', dealParamsCell.hash().toString('hex').substring(0, 32) + '...');
 
   // 3. Reconstruct the signData envelope
   const envelope = buildSignDataEnvelope(
@@ -165,25 +150,12 @@ export function verifyTonConnectSignature(
 
   // 4. Verify ed25519 signature against envelope hash
   const envelopeHash = envelope.hash();
-  console.log('[SIG] envelope hash:', envelopeHash.toString('hex'));
   const sigValid = signVerify(envelopeHash, signature, publicKey);
-  console.log('[SIG] signVerify result:', sigValid);
   if (!sigValid) {
     return { valid: false, error: 'Invalid TonConnect signData signature' };
   }
 
   return { valid: true };
-}
-
-/**
- * Derive address from public key (v4r2 wallet, default).
- */
-export function addressFromPublicKey(publicKey: Buffer): Address {
-  const wallet = WalletContractV4.create({
-    publicKey,
-    workchain: 0,
-  });
-  return wallet.address;
 }
 
 /**
@@ -204,9 +176,8 @@ export function verifyPublicKeyMatchesAddress(
     ['V3R1', WalletContractV3R1.create(opts).address],
   ];
 
-  for (const [version, derived] of candidates) {
+  for (const [, derived] of candidates) {
     if (derived.equals(expectedAddress)) {
-      console.log('[SIG] pubkey matches address using wallet version:', version);
       return true;
     }
   }

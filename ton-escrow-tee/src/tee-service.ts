@@ -1,5 +1,5 @@
 import { TonClient, WalletContractV4 } from '@ton/ton';
-import { Address, toNano, internal } from '@ton/core';
+import { Address, beginCell, toNano, internal } from '@ton/core';
 import {
   TonWallet,
   DealParams,
@@ -238,7 +238,6 @@ export class TeeService {
   }
 
   private buildCreateDealBody(params: DealParams) {
-    const { beginCell } = require('@ton/core');
     const OP_CREATE_DEAL = 0x1;
 
     const addressesCell = beginCell()
