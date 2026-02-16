@@ -156,27 +156,10 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'advertiser.signature and advertiser.publicKey are required' });
     }
 
-    // Debug: log raw incoming values
-    console.log('[TEE] === verifyAndRegisterDeal ===');
-    console.log('[TEE] params:', JSON.stringify({
-      dealId: params.dealId, channelId: params.channelId, postId: params.postId,
-      contentHash: String(params.contentHash).substring(0, 20) + '...',
-      duration: params.duration, publisher: params.publisher,
-      advertiser: params.advertiser, amount: params.amount, postedAt: params.postedAt,
-    }));
-    console.log('[TEE] publisher.signature (first 40):', publisher.signature?.substring(0, 40));
-    console.log('[TEE] publisher.publicKey (first 40):', publisher.publicKey?.substring(0, 40));
-    console.log('[TEE] publisher.timestamp:', publisher.timestamp, 'domain:', publisher.domain);
-    console.log('[TEE] advertiser.signature (first 40):', advertiser.signature?.substring(0, 40));
-    console.log('[TEE] advertiser.publicKey (first 40):', advertiser.publicKey?.substring(0, 40));
-    console.log('[TEE] advertiser.timestamp:', advertiser.timestamp, 'domain:', advertiser.domain);
-
     const pubSigBuf = Buffer.from(publisher.signature, 'base64');
     const pubKeyBuf = Buffer.from(publisher.publicKey, 'hex');
     const advSigBuf = Buffer.from(advertiser.signature, 'base64');
     const advKeyBuf = Buffer.from(advertiser.publicKey, 'hex');
-
-    console.log('[TEE] buffer lengths — pubSig:', pubSigBuf.length, '(need 64) pubKey:', pubKeyBuf.length, '(need 32) advSig:', advSigBuf.length, '(need 64) advKey:', advKeyBuf.length, '(need 32)');
 
     // Parse deal params — publisher/advertiser are users' real wallet addresses
     const dealParams = {
@@ -186,8 +169,6 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
       contentHash: BigInt(params.contentHash),
       amount: BigInt(params.amount),
     };
-
-    console.log('[TEE] parsed addresses — publisher:', dealParams.publisher.toString(), 'advertiser:', dealParams.advertiser.toString());
 
     const result = await teeService.verifyAndRegisterDeal({
       params: dealParams,
@@ -206,7 +187,6 @@ app.post('/verifyAndRegisterDeal', async (req: Request, res: Response) => {
       verificationChatId,
     });
 
-    console.log('[TEE] result:', JSON.stringify(result));
     res.json(result);
   } catch (error) {
     console.error('verifyAndRegisterDeal error:', error);

@@ -27,7 +27,7 @@ ecloud compute app upgrade 0x113DF00a8cb0Aa2b3cd12FF13Ac21c7f07a966Ec --image-re
 ## App Details
 - **App ID**: `0x113DF00a8cb0Aa2b3cd12FF13Ac21c7f07a966Ec`
 - **Image**: `docker.io/4rdii/ton-escrow-tee:latest`
-- **Deployed URL**: `http://104.196.106.144:8000`
+- **Deployed URL**: `http://104.196.106.144:3000`
 
 ## Quick Deploy Script
 

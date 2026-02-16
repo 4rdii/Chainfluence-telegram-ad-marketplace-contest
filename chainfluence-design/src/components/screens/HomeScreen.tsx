@@ -15,8 +15,8 @@ interface HomeScreenProps {
 export function HomeScreen({ user, deals, notifications, channels, onNotificationClick, onDealClick }: HomeScreenProps) {
   const unreadCount = notifications.filter(n => !n.read).length;
   const activeDeals = deals.filter(d => !['RELEASED', 'REFUNDED'].includes(d.status));
-  const pendingActions = deals.filter(d => 
-    d.status === 'CREATIVE_PENDING' || 
+  const pendingActions = deals.filter(d =>
+    d.status === 'CREATIVE_PENDING' ||
     d.status === 'CREATIVE_CHANGES_REQUESTED' ||
     d.status === 'DEPOSITED'
   );
@@ -77,10 +77,10 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
       </div>
 
       {/* Quick Stats */}
-      <div className="px-4 pt-5">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="px-4 pt-6">
+        <div className="grid grid-cols-2 gap-4">
           <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-lg bg-[var(--ton-blue)]/15 flex items-center justify-center">
                 <TrendingUp className="w-4 h-4 text-[var(--ton-blue)]" />
               </div>
@@ -90,7 +90,7 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-lg bg-[var(--pending-amber)]/15 flex items-center justify-center">
                 <Clock className="w-4 h-4 text-[var(--pending-amber)]" />
               </div>
@@ -101,7 +101,7 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
 
           {user.roles.includes('publisher') && (
             <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-[var(--success-green)]/15 flex items-center justify-center">
                   <Coins className="w-4 h-4 text-[var(--success-green)]" />
                 </div>
@@ -113,7 +113,7 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
 
           {user.roles.includes('advertiser') && (
             <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-[var(--ton-blue)]/15 flex items-center justify-center">
                   <Coins className="w-4 h-4 text-[var(--ton-blue)]" />
                 </div>
@@ -127,10 +127,10 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
 
       {/* Action Required */}
       {pendingActions.length > 0 && (
-        <div className="px-4 pt-5">
-          <div className="h-px bg-border mb-5" />
-          <h2 className="text-lg font-semibold mb-3">Action Required</h2>
-          <div className="space-y-3">
+        <div className="px-4 pt-6">
+          <div className="h-px bg-border mb-6" />
+          <h2 className="text-lg font-semibold mb-4">Action Required</h2>
+          <div className="space-y-4">
             {pendingActions.map((deal) => {
               const channel = getChannelById(deal.channelId);
               if (!channel) return null;
@@ -153,13 +153,13 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
                     <StatusBadge status={deal.status} size="sm" />
                   </div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    {deal.status === 'CREATIVE_PENDING' && deal.publisherId === user.id && 
+                    {deal.status === 'CREATIVE_PENDING' && deal.publisherId === user.id &&
                       'Review creative submission'}
-                    {deal.status === 'CREATIVE_PENDING' && deal.advertiserId === user.id && 
+                    {deal.status === 'CREATIVE_PENDING' && deal.advertiserId === user.id &&
                       'Waiting for publisher to review creative'}
-                    {deal.status === 'CREATIVE_CHANGES_REQUESTED' && deal.advertiserId === user.id && 
+                    {deal.status === 'CREATIVE_CHANGES_REQUESTED' && deal.advertiserId === user.id &&
                       'Publisher requested changes to creative'}
-                    {deal.status === 'DEPOSITED' && deal.publisherId === user.id && 
+                    {deal.status === 'DEPOSITED' && deal.publisherId === user.id &&
                       'Accept or decline deal request'}
                   </p>
                   {(deal.status === 'CREATIVE_PENDING' && deal.publisherId === user.id) ||
@@ -177,10 +177,10 @@ export function HomeScreen({ user, deals, notifications, channels, onNotificatio
       )}
 
       {/* Recent Activity */}
-      <div className="px-4 pt-5">
-        <div className="h-px bg-border mb-5" />
-        <h2 className="text-lg font-semibold mb-3">Recent Activity</h2>
-        <div className="space-y-2">
+      <div className="px-4 pt-6">
+        <div className="h-px bg-border mb-6" />
+        <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
+        <div className="space-y-3">
           {notifications.slice(0, 5).map((notification) => {
             const getIcon = () => {
               if (notification.type === 'funds_released') return '🎉';

@@ -2,7 +2,7 @@ import { mnemonicToSeed } from 'bip39';
 import { derivePath } from 'ed25519-hd-key';
 import { keyPairFromSeed, KeyPair } from '@ton/crypto';
 import { WalletContractV4, TonClient } from '@ton/ton';
-import { Address, internal } from '@ton/core';
+import { Address } from '@ton/core';
 import { TonWallet } from './types';
 
 // TON coin type from SLIP-44
@@ -58,38 +58,4 @@ export async function deriveEscrowWallet(mnemonic: string, dealId: number): Prom
  */
 export async function getWalletBalance(client: TonClient, address: Address): Promise<bigint> {
   return client.getBalance(address);
-}
-
-/**
- * Transfer TON from a wallet
- */
-export async function transferTon(
-  client: TonClient,
-  fromWallet: TonWallet,
-  toAddress: string,
-  amount: bigint,
-  memo?: string
-): Promise<{ seqno: number }> {
-  const wallet = WalletContractV4.create({
-    publicKey: fromWallet.publicKey,
-    workchain: 0,
-  });
-
-  const contract = client.open(wallet);
-  const seqno = await contract.getSeqno();
-
-  await contract.sendTransfer({
-    secretKey: fromWallet.secretKey,
-    seqno,
-    messages: [
-      internal({
-        to: toAddress,
-        value: amount,
-        body: memo || '',
-        bounce: false,
-      }),
-    ],
-  });
-
-  return { seqno };
 }
