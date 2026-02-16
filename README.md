@@ -4,6 +4,8 @@
 
 Chainfluence is a trustless advertising marketplace for Telegram channels. Publishers (channel owners) and advertisers connect through a Telegram Mini App. Funds are held in TEE-managed escrow wallets — not by any centralized party — and are automatically released or refunded based on cryptographically verifiable conditions.
 
+> **[Watch the Demo](docs/chainfluence-demo-lq.mp4)**
+
 ---
 
 ## Table of Contents

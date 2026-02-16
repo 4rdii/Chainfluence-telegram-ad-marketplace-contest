@@ -9,15 +9,15 @@ export function FormatBadge({ format, size = 'md' }: FormatBadgeProps) {
   const getFormatLabel = () => {
     switch (format) {
       case 'test':
-        return '3min';
+        return 'Test';
       case '1/24':
-        return '1/24';
+        return '24h Pin';
       case '2/48':
-        return '2/48';
+        return '48h Post';
       case '3/72':
-        return '3/72';
+        return '72h Post';
       case 'eternal':
-        return 'Eternal';
+        return 'Permanent';
     }
   };
 

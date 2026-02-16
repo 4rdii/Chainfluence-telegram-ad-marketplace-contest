@@ -311,7 +311,6 @@ export function ChannelDetailScreen({ channel, onBack, onBookAdSlot }: ChannelDe
                     {pricing.format === '1/24' && 'Your ad will be pinned at the top for 24 hours'}
                     {pricing.format === '2/48' && 'Your ad will stay in the channel for 48 hours'}
                     {pricing.format === '3/72' && 'Your ad will stay in the channel for 72 hours'}
-                    {pricing.format === 'eternal' && 'Your ad will be permanently posted'}
                   </p>
                 </div>
                 <div className="text-right ml-4">

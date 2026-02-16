@@ -63,57 +63,41 @@ export class ChannelsService {
       throw e;
     }
 
-    const gramjsReady = this.gramjs.isReady();
-    const gramjsUserSession = this.gramjs.isUserSession();
-    const hasUsername = !!chat.username;
-    const useSession = gramjsReady && gramjsUserSession && hasUsername;
-
-    this.logger.log(
-      `create: verification path decision gramjsReady=${gramjsReady} gramjsUserSession=${gramjsUserSession} hasUsername=${hasUsername} => useSession=${useSession}`,
-      LOG_CTX,
-    );
-
-    let isAdmin: boolean;
-    if (useSession) {
-      this.logger.log('create: using Telegram session (MTProto) to check admin', LOG_CTX);
-      try {
-        isAdmin = await this.gramjs.isSessionUserChannelAdmin(chat.username);
-        this.logger.log(`create: session user isAdmin=${isAdmin} for @${chat.username}`, LOG_CTX);
-      } catch (err) {
-        isAdmin = false;
-        this.logger.log(
-          `create: session admin check threw ${err instanceof Error ? err.message : String(err)}`,
-          LOG_CTX,
-        );
-      }
-      if (!isAdmin) {
-        this.logger.warn('create: session user is not admin, rejecting', LOG_CTX);
-        throw new ForbiddenException(
-          'Add our verification account as an administrator to the channel, then try again.',
-        );
-      }
-    } else {
-      this.logger.log('create: using Bot API to check admin (session not used)', LOG_CTX);
-      const botId = await this.telegram.getBotId();
-      try {
-        isAdmin = await this.telegram.isBotAdmin(chat.id, botId);
-        this.logger.log(`create: bot isAdmin=${isAdmin} botId=${botId} chatId=${chat.id}`, LOG_CTX);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.logger.log(`create: bot admin check failed ${msg}`, LOG_CTX);
-        if (msg.includes('member list is inaccessible') || msg.includes('getChatMember failed')) {
-          throw new BadRequestException(
-            'Add the bot to the channel as an administrator, then try again.',
-          );
-        }
-        throw e;
-      }
-      if (!isAdmin) {
-        this.logger.warn('create: bot is not admin, rejecting', LOG_CTX);
+    // 1. Verify bot is admin in channel (required for posting)
+    this.logger.log('create: checking bot is admin in channel', LOG_CTX);
+    const botId = await this.telegram.getBotId();
+    try {
+      const botIsAdmin = await this.telegram.isBotAdmin(chat.id, botId);
+      this.logger.log(`create: bot isAdmin=${botIsAdmin} botId=${botId} chatId=${chat.id}`, LOG_CTX);
+      if (!botIsAdmin) {
         throw new ForbiddenException(
           'Add the bot to the channel as an administrator, then try again.',
         );
       }
+    } catch (e) {
+      if (e instanceof ForbiddenException) throw e;
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.log(`create: bot admin check failed ${msg}`, LOG_CTX);
+      if (msg.includes('member list is inaccessible') || msg.includes('getChatMember failed')) {
+        throw new BadRequestException(
+          'Add the bot to the channel as an administrator, then try again.',
+        );
+      }
+      throw e;
+    }
+
+    // 2. Verify requesting user is admin/owner of the channel (MTProto)
+    if (this.gramjs.isReady()) {
+      this.logger.log(`create: checking user ${userId} is admin via MTProto`, LOG_CTX);
+      const userIsAdmin = await this.gramjs.isUserChannelAdmin(chat.id, userId);
+      this.logger.log(`create: user ${userId} isAdmin=${userIsAdmin} in channel ${chat.id}`, LOG_CTX);
+      if (!userIsAdmin) {
+        throw new ForbiddenException(
+          'You must be an admin or owner of this channel to add it.',
+        );
+      }
+    } else {
+      this.logger.warn('create: GramJS not available, skipping user ownership check', LOG_CTX);
     }
 
     const id = BigInt(chat.id);

@@ -41,7 +41,7 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
     'Entertainment', 'Lifestyle', 'Trading', 'NFT', 'Gaming'
   ];
 
-  const formats: AdFormat[] = ['test', '1/24', '2/48', '3/72', 'eternal'];
+  const formats: AdFormat[] = ['test', '1/24', '2/48', '3/72'];
 
   const toggleFormat = (format: AdFormat) => {
     setSelectedFormats(prev =>
@@ -384,7 +384,11 @@ export function CreateCampaignScreen({ onBack, onComplete }: CreateCampaignScree
                     }`}
                   >
                     <span className="font-medium">
-                      {format === 'eternal' ? 'Eternal' : format}
+                      {format === 'test' ? 'Test Post' :
+                        format === '1/24' ? '24h Pinned' :
+                        format === '2/48' ? '48h Post' :
+                        format === '3/72' ? '72h Post' :
+                        format}
                     </span>
                   </button>
                 ))}

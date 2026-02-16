@@ -147,6 +147,34 @@ export class GramJsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Check if a specific Telegram user is admin or creator in a channel.
+   * Uses channels.GetParticipant with the user's Telegram ID.
+   */
+  async isUserChannelAdmin(chatId: number, telegramUserId: number): Promise<boolean> {
+    try {
+      const result = await this.getClient().invoke(
+        new Api.channels.GetParticipant({
+          channel: chatId,
+          participant: new Api.InputPeerUser({
+            userId: BigInt(telegramUserId) as Api.long,
+            accessHash: BigInt(0) as Api.long,
+          }),
+        }),
+      );
+      const p = (result as { participant?: Api.TypeChannelParticipant }).participant;
+      return (
+        p instanceof Api.ChannelParticipantAdmin || p instanceof Api.ChannelParticipantCreator
+      );
+    } catch (err) {
+      this.logger.warn(
+        `isUserChannelAdmin: user ${telegramUserId} not admin in ${chatId}: ${err instanceof Error ? err.message : String(err)}`,
+        'GramJsService',
+      );
+      return false;
+    }
+  }
+
+  /**
    * Fetch channel subscriber count (channels.GetFullChannel – bot allowed).
    * Resolve username via contacts.ResolveUsername first so we never pass a string
    * to GetFullChannel; passing a string can cause the client to resolve the peer

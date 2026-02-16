@@ -51,7 +51,6 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
     { format: '1/24', price: 0, enabled: false, description: 'Pinned for 24 hours' },
     { format: '2/48', price: 0, enabled: false, description: 'Stay for 48 hours' },
     { format: '3/72', price: 0, enabled: false, description: 'Stay for 72 hours' },
-    { format: 'eternal', price: 0, enabled: false, description: 'Permanent post' },
   ]);
 
   const categories: ChannelCategory[] = [
@@ -186,14 +185,11 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setChannelType('private'); setVerifyError(''); setVerified(false); }}
-                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    channelType === 'private'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
+                  disabled
+                  className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-muted text-muted-foreground opacity-50 cursor-not-allowed relative"
                 >
                   Private (link)
+                  <span className="absolute -top-2 -right-2 text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full border border-border">Soon</span>
                 </button>
               </div>
             </div>
@@ -395,7 +391,13 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                 <div key={p.format} className="bg-card border border-border rounded-lg p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h3 className="font-medium mb-1">{p.format === 'eternal' ? 'Eternal' : p.format}</h3>
+                      <h3 className="font-medium mb-1">{
+                        p.format === 'test' ? 'Test Post' :
+                        p.format === '1/24' ? '24h Pinned' :
+                        p.format === '2/48' ? '48h Post' :
+                        p.format === '3/72' ? '72h Post' :
+                        p.format
+                      }</h3>
                       <p className="text-sm text-muted-foreground">{p.description}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
@@ -434,6 +436,28 @@ export function AddChannelScreen({ onBack, onComplete }: AddChannelScreenProps) 
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* Coming Soon */}
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Coming Soon</h3>
+              <div className="space-y-3">
+                {[
+                  { label: 'Story Ad', desc: 'Temporary story visible for 24 hours' },
+                  { label: 'Video Post', desc: 'Sponsored video content in channel' },
+                  { label: 'Carousel', desc: 'Multi-image swipeable ad post' },
+                ].map((item) => (
+                  <div key={item.label} className="bg-card border border-border rounded-lg p-4 opacity-50">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-medium mb-1">{item.label}</h3>
+                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      </div>
+                      <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">Soon</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="flex gap-3">
