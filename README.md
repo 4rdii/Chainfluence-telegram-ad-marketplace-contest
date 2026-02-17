@@ -4,7 +4,16 @@
 
 Chainfluence is a trustless advertising marketplace for Telegram channels. Publishers (channel owners) and advertisers connect through a Telegram Mini App. Funds are held in TEE-managed escrow wallets — not by any centralized party — and are automatically released or refunded based on cryptographically verifiable conditions.
 
-> **[Watch the Demo](docs/chainfluence-demo-lq.mp4)**
+> **[Watch how the Demo works!](docs/chainfluence-demo-lq.mp4)**
+
+### Live Demo
+
+- **Telegram Bot**: [Telegram MiniApp](https://t.me/chainfluence_miniapp_bot/chainfluence)
+- **Deal Registry Contract**: [Contract On TestNet](https://testnet.tonscan.org/address/kQBqQcjktBg-F8GAFBEcllmTfaxxqCK99ZTqfkOKMFNMmTRi)
+- **Sample Transactions**:
+  - Deal registration: [Deal Registery](https://testnet.tonscan.org/tx/f3048827a2018fcd51fd6708da22304947a6d6a2a3f51cc60e1d1fbf6529d1c3)
+  - Tee Controled Escrow: [Escrow Address](https://testnet.tonscan.org/address/0QCReMaxigFYW_ibtk4fgwS_oCjPLgFlLuCoHuUydMFfgchR) 
+  - Escrow release: [Escrow Release tx](https://testnet.tonscan.org/tx/48ff215ff08d34399b0256f1fc9e8916abbb7ac488b51d1bf0d6e26c734851ee)
 
 ---
 
@@ -616,6 +625,18 @@ Detailed per-component documentation is in the [docs/](docs/) folder:
 - [Backend](docs/backend.md) — API structure, auth flow, database schema, scheduler
 - [TEE Service](docs/tee.md) — Escrow logic, wallet derivation, signature verification, content checks
 - [Smart Contract](docs/smart-contract.md) — Contract design, cell structure, security properties
+
+---
+
+## AI Usage
+
+| Module | AI % | Notes |
+|--------|------|-------|
+| **Frontend** (`chainfluence-design/`) | ~80% | UI components, screens, and styling largely AI-generated. Deal signing crypto and TonConnect integration guided by human. |
+| **Backend** (`backend/`) | ~65% | CRUD modules, auth flow, and Prisma schema AI-generated. Escrow orchestration, scheduler logic, and GramJS integration human-directed. |
+| **TEE Service** (`ton-escrow-tee/`) | ~50% | wallet derivation designed and reviewed by human. Boilerplate and helpers AI-assisted. |
+| **Smart Contract** (`ton-deal-registry/`) | ~20% | Tests and wrapper AI-assisted. |
+| **Architecture & Design** | ~10% | System design, trust model, component boundaries, and key decisions made by human. AI assisted with documentation. |
 
 ---
 
